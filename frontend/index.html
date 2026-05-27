@@ -655,7 +655,7 @@ function renderFabSectorDetail(sectorKey,filterStatus='ALL',searchTerm=''){
     const col=semC(pct),bw=Math.min(Math.round(load/maxLoad*100),100),name=CT_NAMES[ct]||'';
     const tr=document.createElement('tr');tr.className='ct-main-tr';tr.style.borderBottom='1px solid var(--border2)';
     tr.innerHTML=`
-      <td style="padding:10px 12px"><div class="ct-name" style="color:${ctRowColor}">${ct}</div><div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-top:2px">${name}</div></td>
+      <td style="padding:10px 12px"><div class="ct-name" style="color:${CT_NAMES[ct]?(getSectorForCT(ct)||{color:ctColor}).color:ctColor}">${ct}</div><div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-top:2px">${name}</div></td>
       <td style="padding:10px 12px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent3);font-weight:700">${fmtH(load)}</td>
       <td style="padding:10px 12px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3)">${fmtH(cap)}</td>
       <td style="padding:6px 4px"><input class="tci" type="number" min="1" max="3" value="${s.turnos}" data-ct="${ct}" data-f="turnos"></td>
