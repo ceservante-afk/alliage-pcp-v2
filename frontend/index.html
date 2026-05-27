@@ -260,19 +260,38 @@ const API = '';  // same origin
 // ── HELPERS ───────────────────────────────────────────────────────────
 const TC={FERT:'#1a6fb5',HAWA:'#16a34a',ZREV:'#6d28d9',ROH:'#92400e',HALB:'#991b1b',VERP:'#164e63'};
 const FAB_PFX=['ESTA','MUSI','USIN','PINP','GALV'];
+const LASER_CTS=['ESTA-024','ESTA-008'];
+const SOLDA_CTS=['ESTA-033','ESTA-009','ESTA-020','ESTA-028','ESTA-032'];
 const FAB_SECTORS=[
-  {key:'ESTA',label:'Estamparia',color:'#3a7bd5'},
-  {key:'USIN',label:'Usinagem',color:'#22c55e'},
-  {key:'MUSI',label:'Micro Usinagem',color:'#eab308'},
-  {key:'PINP',label:'Pintura Pó',color:'#f97316'},
-  {key:'GALV',label:'Galvanoplastia',color:'#a78bfa'},
+  {key:'LASER', label:'Corte Laser',     color:'#22d3ee', cts:LASER_CTS,
+   match:ct=>LASER_CTS.includes(ct)},
+  {key:'SOLDA', label:'Solda Elétrica',  color:'#f97316', cts:SOLDA_CTS,
+   match:ct=>SOLDA_CTS.includes(ct)},
+  {key:'ESTA',  label:'Estamparia Geral',color:'#3a7bd5',
+   match:ct=>ct.startsWith('ESTA')&&!LASER_CTS.includes(ct)&&!SOLDA_CTS.includes(ct)},
+  {key:'USIN',  label:'Usinagem',        color:'#22c55e',
+   match:ct=>ct.startsWith('USIN')},
+  {key:'MUSI',  label:'Micro Usinagem',  color:'#eab308',
+   match:ct=>ct.startsWith('MUSI')},
+  {key:'PINP',  label:'Pintura Pó',      color:'#f97316',
+   match:ct=>ct.startsWith('PINP')},
+  {key:'GALV',  label:'Galvanoplastia',  color:'#a78bfa',
+   match:ct=>ct.startsWith('GALV')},
+  {key:'OBSOLETO', label:'⚠ CTs Obsoletos', color:'#6b7280',
+   match:ct=>(CT_NAMES[ct]||'').toUpperCase().includes('OBSOLETO')},
 ];
 const isFab=ct=>FAB_PFX.some(p=>ct.startsWith(p));
+function getSectorForCT(ct){
+  // Check obsoleto first
+  if((CT_NAMES[ct]||'').toUpperCase().includes('OBSOLETO'))
+    return FAB_SECTORS.find(s=>s.key==='OBSOLETO');
+  return FAB_SECTORS.find(s=>s.match&&s.match(ct));
+}
 function tc(t){return TC[t]||'#364e66';}
 function fmtH(m){if(m<60)return m.toFixed(1)+'min';const h=Math.floor(m/60),mn=m%60;return h+'h'+(mn>0?mn.toFixed(0)+'min':'');}
 function semC(p){return p>=100?'var(--red)':p>=80?'var(--yellow)':'var(--green)';}
 function semTxt(p){return p>=100?'CRÍTICO':p>=80?'ALERTA':'OK';}
-function getSectorKey(ct){const s=FAB_SECTORS.find(s=>ct.startsWith(s.key));return s?s.key:null;}
+function getSectorKey(ct){const s=getSectorForCT(ct);return s?s.key:null;}
 
 async function api(path){
   const r=await fetch(API+path);
@@ -323,11 +342,14 @@ async function init(){
   document.getElementById('sRot').textContent=cts.length+' CTs';
   bar.style.width='70%';
 
-  // Load CT names, PA→Linha, CTI from static JSON endpoints
+  // Load CT names, PA→Linha, CTI from API
   try{
-    CT_NAMES=await api('/static/ct_names.json');
-    PA_LINHA=await api('/static/pa_linha.json');
-    CTI=await api('/static/cti.json');
+    const ctNamesData=await api('/api/roteiro/ct_names');
+    CT_NAMES=ctNamesData;
+    const paLinhaData=await api('/api/bom/pa_linha');
+    PA_LINHA=paLinhaData;
+    const ctiData=await api('/api/roteiro/cti');
+    CTI=ctiData;
     document.getElementById('rCTCount').textContent=Object.keys(CTI).length;
   }catch(e){console.warn('Static data load error:',e);}
 
@@ -422,9 +444,10 @@ async function calcPA(num){
     // Build compMap from result
     const compMap={};
     for(const[ct,data]of Object.entries(result)){
+      if(!data||!data.components)continue;
       compMap[ct]=data.components.map(c=>({
-        mat:c.mat,desc:c.desc,tipo:'',accQ:c.qty_total,
-        qtyTotal:c.qty_total,indirUnit:c.indir_unit,mins:c.mins
+        mat:c.mat,desc:c.desc||'',tipo:'',accQ:c.qty_total||0,
+        qtyTotal:c.qty_total||0,indirUnit:c.indir_unit||0,mins:c.mins||0
       }));
     }
     queued[num].compMap=compMap;
@@ -456,7 +479,10 @@ function getGlobalMaps(){
   const ctMap={},compMap={};
   for(const{ctMap:cm,compMap:pm}of Object.values(queued)){
     if(!cm)continue;
-    for(const[ct,data]of Object.entries(cm))ctMap[ct]=(ctMap[ct]||0)+data.load_min;
+    for(const[ct,data]of Object.entries(cm)){
+      const load=typeof data==='object'?data.load_min:data;
+      ctMap[ct]=(ctMap[ct]||0)+(load||0);
+    }
     for(const[ct,items]of Object.entries(pm||{})){
       if(!compMap[ct])compMap[ct]=[];
       for(const item of items){
@@ -506,7 +532,10 @@ function buildCTRows(entries,tbody,maxLoad,ctColor,sectorClass){
   entries.forEach(([ct,load])=>{
     const s=defS(ct);const cap=capMin(ct);const pct=cap>0?Math.round(load/cap*100):0;
     const col=semC(pct);const bw=Math.min(Math.round(load/maxLoad*100),100);
-    const name=CT_NAMES[ct]||'';const tr=document.createElement('tr');tr.className='ct-main-tr';
+    const name=CT_NAMES[ct]||'';
+    const ctSecDef=getSectorForCT(ct);
+    const ctRowColor=ctSecDef?ctSecDef.color:(sectorDef?sectorDef.color:'var(--accent3)');
+    const tr=document.createElement('tr');tr.className='ct-main-tr';
     tr.innerHTML=`
       <td><div class="ct-name" style="color:${ctColor}">${ct}</div><div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-top:1px">${name}</div></td>
       <td class="ct-load-val">${fmtH(load)}</td><td class="ct-cap-val">${fmtH(cap)}</td>
@@ -537,7 +566,10 @@ function renderFabSectorCards(){
   const st=document.querySelector('.sector-tabs');if(st)st.style.display='';
 
   const totals={};FAB_SECTORS.forEach(s=>totals[s.key]={load:0,cap:0});
-  Object.entries(globalCTMap).forEach(([ct,load])=>{const k=getSectorKey(ct);if(k){totals[k].load+=load;totals[k].cap+=capMin(ct);}});
+  Object.entries(globalCTMap).forEach(([ct,load])=>{
+    const sec=getSectorForCT(ct);
+    if(sec&&totals[sec.key]){totals[sec.key].load+=load;totals[sec.key].cap+=capMin(ct);}
+  });
 
   const grid=document.createElement('div');grid.className='fab-sector-grid';
   FAB_SECTORS.forEach(sector=>{
@@ -595,7 +627,10 @@ function renderFabSectorDetail(sectorKey,filterStatus='ALL',searchTerm=''){
   document.getElementById('fabSectorSearch').addEventListener('input',e=>renderFabSectorDetail(sectorKey,filterStatus,e.target.value));
   backBar.querySelectorAll('.fab-filter-btn').forEach(btn=>btn.addEventListener('click',()=>renderFabSectorDetail(sectorKey,btn.dataset.fs,document.getElementById('fabSectorSearch')?.value||'')));
 
-  const allEntries=Object.entries(globalCTMap).filter(([ct])=>ct.startsWith(sectorKey)).sort((a,b)=>b[1]-a[1]);
+  const sectorDef=FAB_SECTORS.find(s=>s.key===sectorKey);
+  const allEntries=Object.entries(globalCTMap)
+    .filter(([ct])=>sectorDef&&sectorDef.match?sectorDef.match(ct):ct.startsWith(sectorKey))
+    .sort((a,b)=>b[1]-a[1]);
   const maxLoad=allEntries[0]?.[1]||1;
   const entries=allEntries.filter(([ct,load])=>{
     const cap=capMin(ct),pct=cap>0?Math.round(load/cap*100):0;
@@ -620,7 +655,7 @@ function renderFabSectorDetail(sectorKey,filterStatus='ALL',searchTerm=''){
     const col=semC(pct),bw=Math.min(Math.round(load/maxLoad*100),100),name=CT_NAMES[ct]||'';
     const tr=document.createElement('tr');tr.className='ct-main-tr';tr.style.borderBottom='1px solid var(--border2)';
     tr.innerHTML=`
-      <td style="padding:10px 12px"><div class="ct-name" style="color:${sector.color}">${ct}</div><div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-top:2px">${name}</div></td>
+      <td style="padding:10px 12px"><div class="ct-name" style="color:${ctRowColor}">${ct}</div><div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-top:2px">${name}</div></td>
       <td style="padding:10px 12px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent3);font-weight:700">${fmtH(load)}</td>
       <td style="padding:10px 12px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3)">${fmtH(cap)}</td>
       <td style="padding:6px 4px"><input class="tci" type="number" min="1" max="3" value="${s.turnos}" data-ct="${ct}" data-f="turnos"></td>
