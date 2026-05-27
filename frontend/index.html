@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>PCP · ALLIAGE</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Rajdhani:wght@400;500;600;700&display=swap');
+:root{
+  --bg:#080c12;--s1:#0d1520;--s2:#111d2e;--s3:#162035;--s4:#1a2740;
+  --border:#1a2d45;--border2:#1e3554;
+  --text:#c8d8e8;--text2:#8aaac8;--text3:#5a7a9a;
+  --accent:#3a7bd5;--accent2:#5b9cf6;--accent3:#4aaef5;
+  --green:#22c55e;--yellow:#eab308;--red:#ef4444;
+  --gdim:rgba(34,197,94,.12);--ydim:rgba(234,179,8,.12);--rdim:rgba(239,68,68,.12);
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;overflow:hidden;}
+body{background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;display:flex;flex-direction:column;}
+
+.lbar{position:fixed;top:0;left:0;height:2px;background:var(--accent2);z-index:999;transition:width .3s;}
+.topbar{height:44px;background:var(--s1);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 18px;gap:16px;flex-shrink:0;}
+.logo{font-size:12px;font-weight:800;letter-spacing:.18em;color:var(--accent3);}
+.logo em{color:var(--text3);font-style:normal;}
+.tbar-stats{margin-left:auto;display:flex;gap:16px;align-items:center;}
+.tstat{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3);}
+.tstat b{color:var(--accent3);}
+.sysdot{width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block;margin-right:5px;box-shadow:0 0 6px var(--green);animation:blink 2s infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+.tabs{background:var(--s1);border-bottom:1px solid var(--border);display:flex;padding:0 18px;flex-shrink:0;}
+.tab{padding:9px 16px;font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;}
+.tab:hover{color:var(--text2);}
+.tab.active{color:var(--accent3);border-bottom-color:var(--accent);background:rgba(74,174,245,.07);}
+
+.screen{display:none;flex:1;overflow:hidden;min-height:0;}
+.screen.on{display:flex;}
+
+/* SIDEBAR */
+.sb{width:252px;flex-shrink:0;background:var(--s1);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;min-height:0;}
+.sb-head{padding:9px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.sb-search{display:flex;align-items:center;gap:5px;background:var(--bg);border:1px solid var(--border2);border-radius:3px;padding:5px 8px;}
+.sb-search input{flex:1;background:transparent;border:none;outline:none;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text);}
+.sb-search input::placeholder{color:var(--text3);}
+.sb-chips{display:flex;gap:3px;margin-top:6px;}
+.chip{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;padding:2px 7px;border-radius:2px;border:1px solid var(--border2);background:transparent;color:var(--text3);cursor:pointer;transition:all .15s;}
+.chip.on{background:rgba(58,123,213,.15);border-color:var(--accent);color:var(--accent3);}
+.sb-cnt{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);padding:5px 9px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.sb-cnt b{color:var(--accent3);}
+.sb-list{flex:1;overflow-y:auto;min-height:0;}
+.sb-list::-webkit-scrollbar{width:4px;}
+.sb-list::-webkit-scrollbar-thumb{background:var(--border2);}
+
+.pa-row{display:flex;align-items:center;gap:7px;padding:8px 10px;cursor:pointer;border-left:2px solid transparent;border-bottom:1px solid var(--border);transition:all .1s;}
+.pa-row:hover{background:rgba(58,123,213,.05);}
+.pa-row.on{background:rgba(58,123,213,.08);border-left-color:var(--accent);}
+.pa-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.pa-ri{flex:1;min-width:0;}
+.pa-rn{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3);}
+.pa-rd{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.pa-tp{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;padding:1px 4px;border-radius:2px;color:#fff;flex-shrink:0;}
+
+/* PROG MAIN */
+.prog-main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;background:var(--bg);}
+.prog-bar{padding:7px 14px;border-bottom:1px solid var(--border);background:var(--s1);display:flex;align-items:center;gap:8px;flex-shrink:0;flex-wrap:wrap;}
+.week-lbl{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent3);background:rgba(26,111,181,.15);border:1px solid var(--border2);border-radius:3px;padding:3px 10px;}
+.xls-btn{display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:3px;background:rgba(26,111,181,.12);border:1px solid var(--accent);color:var(--accent3);font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;cursor:pointer;transition:all .15s;margin-left:auto;}
+.calc-all{padding:4px 13px;border-radius:3px;background:var(--accent2);border:none;color:#fff;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;cursor:pointer;transition:all .15s;}
+.clear-btn{padding:4px 11px;border-radius:3px;background:transparent;border:1px solid var(--border2);color:var(--text3);font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;cursor:pointer;transition:all .15s;}
+.clear-btn:hover{border-color:var(--red);color:var(--red);}
+
+.prog-wrap{flex:1;overflow-y:auto;padding:10px 14px;min-height:0;}
+.prog-wrap::-webkit-scrollbar{width:4px;}
+.prog-wrap::-webkit-scrollbar-thumb{background:var(--border2);}
+.prog-empty{height:200px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--text3);}
+.prog-empty-icon{font-size:32px;opacity:.35;}
+
+.pg-head{display:grid;grid-template-columns:1fr 80px 80px 26px;gap:8px;padding:3px 9px 5px;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid var(--border);margin-bottom:4px;}
+.pc{display:grid;grid-template-columns:1fr 80px 80px 26px;gap:8px;align-items:center;background:var(--s1);border:1px solid var(--border);border-radius:3px;padding:5px 9px;margin-bottom:4px;transition:border-color .15s;}
+.pc-num{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3);}
+.pc-desc{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.qty-inp{width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:3px;padding:4px 5px;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--accent3);outline:none;text-align:center;}
+.cb{width:100%;padding:5px 0;border-radius:4px;background:rgba(26,111,181,.12);border:1px solid var(--accent);color:var(--accent3);font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;}
+.cb.done{background:rgba(34,197,94,.2);border-color:var(--green);color:var(--green);box-shadow:0 0 6px rgba(34,197,94,.2);}
+.db{background:transparent;border:1px solid var(--border);border-radius:50%;color:var(--text3);cursor:pointer;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:11px;transition:all .15s;}
+.db:hover{border-color:var(--red);color:var(--red);}
+.pc-pills{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:4px;padding-top:5px;border-top:1px solid var(--border);margin-top:1px;}
+.pill{display:flex;align-items:center;gap:4px;background:var(--s2);border:1px solid var(--border);border-radius:2px;padding:2px 6px;font-family:'JetBrains Mono',monospace;font-size:9px;}
+.pill-n{color:var(--text2);font-weight:700;}
+.pill-v{color:var(--accent3);}
+
+/* CONSOLIDADO */
+.consol-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;}
+.consol-topbar{padding:8px 18px;border-bottom:1px solid var(--border);background:var(--s1);display:flex;align-items:center;gap:14px;flex-shrink:0;}
+.consol-title{font-size:14px;font-weight:800;}
+.consol-sub{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);}
+.recalc{margin-left:auto;padding:4px 12px;border-radius:3px;background:rgba(26,111,181,.12);border:1px solid var(--accent);color:var(--accent3);font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;cursor:pointer;}
+.sector-tabs{display:flex;padding:0 18px;background:var(--s2);border-bottom:1px solid var(--border);flex-shrink:0;}
+.stab{padding:7px 14px;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s;}
+.stab.active.fab{color:var(--accent3);border-bottom-color:var(--accent);}
+.stab.active.mont{color:#9d84f5;border-bottom-color:#7c63e0;}
+.sector-body{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;}
+
+/* CT TABLE */
+table.ctt{width:100%;border-collapse:collapse;}
+table.ctt th{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;padding:6px 10px;border-bottom:1px solid var(--border);text-align:left;position:sticky;top:0;background:var(--s1);z-index:1;}
+.ct-main-tr td{padding:8px 10px;border-bottom:1px solid var(--border2);vertical-align:middle;transition:background .1s;}
+.ct-main-tr:hover td{background:rgba(58,123,213,.04);}
+.ct-name{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;}
+.ct-load-val{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent3);}
+.ct-cap-val{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3);}
+.ct-pct{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:800;}
+.ct-status{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;}
+.ct-bar-bg{height:6px;background:var(--s4);border-radius:2px;overflow:hidden;width:90px;}
+.ct-bar-fill{height:100%;border-radius:2px;transition:width .5s;}
+.ct-scroll{flex:1;overflow-y:auto;min-height:0;}
+.ct-scroll::-webkit-scrollbar{width:3px;}
+.ct-scroll::-webkit-scrollbar-thumb{background:var(--border2);}
+.tci{background:var(--bg);border:1px solid var(--border2);border-radius:2px;padding:3px 5px;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:var(--text2);outline:none;width:50px;text-align:center;}
+.tci:focus{border-color:var(--accent2);}
+
+/* DETAIL PANEL */
+.detail-panel{position:fixed;top:0;right:0;bottom:0;width:640px;background:var(--s1);border-left:2px solid var(--border2);display:flex;flex-direction:column;overflow:hidden;z-index:100;transition:transform .25s ease;box-shadow:-4px 0 24px rgba(0,0,0,.5);backdrop-filter:blur(2px);}
+.detail-panel.closed{transform:translateX(100%);}
+.det-head{padding:10px 14px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;gap:8px;}
+.det-ct-name{font-size:15px;font-weight:700;letter-spacing:.04em;flex:1;}
+.det-ct-name.fab{color:var(--accent3);}
+.det-ct-name.mont{color:#9d84f5;}
+.det-close{background:transparent;border:1px solid var(--border);border-radius:3px;color:var(--text3);cursor:pointer;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:12px;transition:all .15s;}
+.det-close:hover{border-color:var(--text2);color:var(--text);}
+.det-meta{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);padding:5px 14px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.det-meta b{color:var(--accent3);}
+.det-scroll{flex:1;overflow-y:auto;padding:10px 14px;}
+.det-scroll::-webkit-scrollbar{width:3px;}
+.det-scroll::-webkit-scrollbar-thumb{background:var(--border2);}
+.det-ops{width:100%;border-collapse:collapse;}
+.det-ops th{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;padding:5px 8px;border-bottom:1px solid var(--border);text-align:left;}
+.det-ops td{padding:5px 8px;border-bottom:1px solid var(--border);color:var(--text2);}
+.det-ops tr:hover td{background:rgba(58,123,213,.05);}
+.sort-th:hover{color:var(--accent3)!important;background:rgba(26,111,181,.08);}
+
+/* FAB SECTOR */
+.fab-sector-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;padding:20px;overflow-y:auto;align-content:start;flex:1;min-height:0;}
+</style>
+</head>
+<body>
+<div class="lbar" id="lbar" style="width:0"></div>
+
+<div class="topbar">
+  <div class="logo">ALLIAGE <em>·</em> PCP</div>
+  <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3)">BOM + Roteiros SAP</span>
+  <div class="tbar-stats">
+    <div class="tstat"><span class="sysdot"></span>ONLINE</div>
+    <div class="tstat">PAs: <b id="sPAs">—</b></div>
+    <div class="tstat">Roteiros: <b id="sRot">—</b></div>
+    <div class="tstat">Programados: <b id="sProgN">0</b></div>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-s="Prog">Programação</div>
+  <div class="tab" data-s="Consol">Consolidado CTs</div>
+  <div class="tab" data-s="Roteiros">Roteiros por CT</div>
+</div>
+
+<!-- PROGRAMAÇÃO -->
+<div class="screen on" id="sProg">
+  <div class="sb">
+    <div class="sb-head">
+      <div class="sb-search">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input id="srch" placeholder="Buscar PA...">
+      </div>
+      <div class="sb-chips">
+        <button class="chip on" data-t="ALL">TODOS</button>
+        <button class="chip" data-t="FERT">FERT</button>
+        <button class="chip" data-t="HAWA">HAWA</button>
+        <button class="chip" data-t="ZREV">ZREV</button>
+      </div>
+    </div>
+    <div class="sb-cnt"><b id="paCount">—</b> PAs</div>
+    <div class="sb-list" id="paList"></div>
+  </div>
+  <div class="prog-main">
+    <div class="prog-bar">
+      <span class="week-lbl" id="weekLbl"></span>
+      <label class="xls-btn">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Importar XLS
+        <input type="file" id="xlsIn" accept=".xlsx,.xls,.csv" style="display:none">
+      </label>
+      <button class="calc-all" id="calcAll">▶ Calcular Tudo</button>
+      <button class="clear-btn" id="clearProg">✕ Limpar</button>
+    </div>
+    <div class="prog-wrap" id="progWrap">
+      <div class="prog-empty"><div class="prog-empty-icon">⬡</div><div>← Use a lista à esquerda para adicionar PAs à programação</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- CONSOLIDADO -->
+<div class="screen" id="sConsol">
+  <div class="consol-wrap">
+    <div class="consol-topbar">
+      <div class="consol-title">Capacidade de Fabricação</div>
+      <div class="consol-sub" id="consolSub">0 PA(s) · semana corrente</div>
+      <button class="recalc" id="recalcBtn">↺ Recalcular</button>
+    </div>
+    <div class="sector-tabs">
+      <div class="stab active fab" data-sc="fab">Fabricação</div>
+      <div class="stab mont" data-sc="mont">Montagem</div>
+    </div>
+    <div class="sector-body" id="sectorBody"></div>
+  </div>
+</div>
+
+<!-- ROTEIROS POR CT -->
+<div class="screen" id="sRoteiros">
+  <div class="sb">
+    <div class="sb-head">
+      <div class="sb-search">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input id="rSrch" placeholder="Buscar CT...">
+      </div>
+      <div class="sb-chips">
+        <button class="chip on" data-rs="ALL">TODOS</button>
+        <button class="chip" data-rs="fab">FAB</button>
+        <button class="chip" data-rs="mont">MONT</button>
+      </div>
+    </div>
+    <div class="sb-cnt"><b id="rCTCount">—</b> CTs</div>
+    <div class="sb-list" id="rCTList"></div>
+  </div>
+  <div class="prog-main">
+    <div class="prog-bar" style="gap:12px">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--accent3)" id="rCTName">Selecione um CT</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3)" id="rCTMeta"></div>
+      <div style="display:flex;gap:6px;margin-left:auto;align-items:center;">
+        <div class="sb-search" style="width:180px">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input id="rItemSrch" placeholder="Buscar descrição...">
+        </div>
+        <div style="display:flex;align-items:center;gap:4px;background:var(--bg);border:1px solid var(--border2);border-radius:4px;padding:4px 8px;">
+          <input id="rCompSearch" placeholder="Buscar por código..." style="background:transparent;border:none;outline:none;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text);width:140px;">
+          <button id="rCompSearchBtn" style="padding:1px 8px;border-radius:3px;border:1px solid var(--accent);background:rgba(58,123,213,.15);color:var(--accent3);font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer;">→</button>
+        </div>
+      </div>
+    </div>
+    <div class="prog-wrap" id="rTableWrap" style="padding:0">
+      <div class="prog-empty" style="height:200px"><div class="prog-empty-icon">◈</div><div>Selecione um CT para ver os roteiros</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── CONFIG ────────────────────────────────────────────────────────────
+const API = '';  // same origin
+
+// ── HELPERS ───────────────────────────────────────────────────────────
+const TC={FERT:'#1a6fb5',HAWA:'#16a34a',ZREV:'#6d28d9',ROH:'#92400e',HALB:'#991b1b',VERP:'#164e63'};
+const FAB_PFX=['ESTA','MUSI','USIN','PINP','GALV'];
+const FAB_SECTORS=[
+  {key:'ESTA',label:'Estamparia',color:'#3a7bd5'},
+  {key:'USIN',label:'Usinagem',color:'#22c55e'},
+  {key:'MUSI',label:'Micro Usinagem',color:'#eab308'},
+  {key:'PINP',label:'Pintura Pó',color:'#f97316'},
+  {key:'GALV',label:'Galvanoplastia',color:'#a78bfa'},
+];
+const isFab=ct=>FAB_PFX.some(p=>ct.startsWith(p));
+function tc(t){return TC[t]||'#364e66';}
+function fmtH(m){if(m<60)return m.toFixed(1)+'min';const h=Math.floor(m/60),mn=m%60;return h+'h'+(mn>0?mn.toFixed(0)+'min':'');}
+function semC(p){return p>=100?'var(--red)':p>=80?'var(--yellow)':'var(--green)';}
+function semTxt(p){return p>=100?'CRÍTICO':p>=80?'ALERTA':'OK';}
+function getSectorKey(ct){const s=FAB_SECTORS.find(s=>ct.startsWith(s.key));return s?s.key:null;}
+
+async function api(path){
+  const r=await fetch(API+path);
+  if(!r.ok)throw new Error(await r.text());
+  return r.json();
+}
+
+// ── STATE ─────────────────────────────────────────────────────────────
+let ALL_PAS=[], CT_NAMES={}, PA_LINHA={}, CTI={};
+let filtered=[], filterT='ALL', srchQ='';
+let queued={};      // num -> {pa, qty, ctMap, compMap}
+let ctSets={};
+let globalCTMap={}, globalCompMap={};
+let activeSector='fab', activeFabSector=null, selectedCT=null;
+let rActiveCT=null, rSortCol='indir', rSortAsc=false, rSectorFilter='ALL';
+
+function defS(ct){return{turnos:ctSets[ct]?.turnos??1,hturno:ctSets[ct]?.hturno??8,dias:ctSets[ct]?.dias??5,efic:ctSets[ct]?.efic??85};}
+function capMin(ct){const s=defS(ct);return s.turnos*s.hturno*s.dias*(s.efic/100)*60;}
+function saveCtSets(){try{localStorage.setItem('pcp_cts_v2',JSON.stringify(ctSets));}catch(e){}}
+
+function updateProgCounter(){
+  const pas=Object.keys(queued).length;
+  const pcs=Object.values(queued).reduce((s,{qty})=>s+qty,0);
+  document.getElementById('sProgN').textContent=pas+' PA / '+Math.round(pcs)+' pc';
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────
+async function init(){
+  const bar=document.getElementById('lbar');
+  bar.style.width='10%';
+  try{ctSets=JSON.parse(localStorage.getItem('pcp_cts_v2')||'{}');}catch(e){}
+
+  // Set week label
+  const d=new Date(),day=d.getDay();
+  const mon=new Date(d);mon.setDate(d.getDate()-(day===0?6:day-1));
+  const fri=new Date(mon);fri.setDate(mon.getDate()+4);
+  const fd=x=>x.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+  document.getElementById('weekLbl').textContent='Semana: '+fd(mon)+' → '+fd(fri);
+  bar.style.width='20%';
+
+  // Load PAs
+  ALL_PAS=await api('/api/bom/pas');
+  bar.style.width='50%';
+  document.getElementById('sPAs').textContent=ALL_PAS.length;
+
+  // Load CTs
+  const cts=await api('/api/roteiro/cts');
+  document.getElementById('sRot').textContent=cts.length+' CTs';
+  bar.style.width='70%';
+
+  // Load CT names, PA→Linha, CTI from static JSON endpoints
+  try{
+    CT_NAMES=await api('/static/ct_names.json');
+    PA_LINHA=await api('/static/pa_linha.json');
+    CTI=await api('/static/cti.json');
+    document.getElementById('rCTCount').textContent=Object.keys(CTI).length;
+  }catch(e){console.warn('Static data load error:',e);}
+
+  bar.style.width='100%';
+  setTimeout(()=>bar.style.display='none',400);
+
+  filtered=ALL_PAS;
+  renderPAList();
+  setupEvents();
+}
+
+// ── PA LIST ───────────────────────────────────────────────────────────
+function renderPAList(){
+  const q=srchQ.toLowerCase();
+  filtered=ALL_PAS.filter(p=>(filterT==='ALL'||p.tipo===filterT)&&(!q||p.mat.toLowerCase().includes(q)||p.desc.toLowerCase().includes(q)));
+  document.getElementById('paCount').textContent=filtered.length;
+  const list=document.getElementById('paList'),frag=document.createDocumentFragment();
+  filtered.forEach(pa=>{
+    const d=document.createElement('div');
+    d.className='pa-row'+(queued[pa.mat]?' on':'');
+    d.innerHTML=`<div class="pa-dot" style="background:${tc(pa.tipo)}"></div>
+      <div class="pa-ri"><div class="pa-rn">${pa.mat}</div><div class="pa-rd" title="${pa.desc}">${pa.desc}</div></div>
+      <div class="pa-tp" style="background:${tc(pa.tipo)}">${pa.tipo}</div>`;
+    d.addEventListener('click',()=>addQ(pa));
+    frag.appendChild(d);
+  });
+  list.innerHTML='';list.appendChild(frag);
+}
+
+function addQ(pa){
+  if(queued[pa.mat])return;
+  queued[pa.mat]={pa,qty:1,ctMap:null,compMap:null};
+  updateProgCounter();renderProgGrid();renderPAList();
+}
+
+// ── PROG GRID ─────────────────────────────────────────────────────────
+function renderProgGrid(){
+  const wrap=document.getElementById('progWrap');
+  const keys=Object.keys(queued);
+  if(!keys.length){
+    wrap.innerHTML='<div class="prog-empty"><div class="prog-empty-icon">⬡</div><div>← Use a lista à esquerda para adicionar PAs à programação</div></div>';
+    return;
+  }
+  wrap.innerHTML='';
+  const head=document.createElement('div');
+  head.className='pg-head';
+  head.innerHTML='<div>Produto Acabado</div><div>QTY (pc)</div><div></div><div></div>';
+  wrap.appendChild(head);
+  keys.forEach(num=>{
+    const{pa,qty,ctMap}=queued[num];
+    const card=document.createElement('div');
+    card.className='pc';
+    card.innerHTML=`
+      <div><div class="pc-num">${pa.mat}</div><div class="pc-desc" title="${pa.desc}">${pa.desc}</div></div>
+      <div style="display:flex;align-items:center;gap:3px">
+        <input class="qty-inp" type="number" min="1" value="${qty}" data-num="${num}">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3)">pc</span>
+      </div>
+      <button class="cb${ctMap?' done':''}" data-num="${num}">${ctMap?'✓ CALC':'CALC'}</button>
+      <button class="db" data-num="${num}">✕</button>
+      ${ctMap?renderPills(ctMap):''}`;
+    wrap.appendChild(card);
+  });
+  wrap.querySelectorAll('.qty-inp').forEach(i=>i.addEventListener('change',e=>{
+    queued[e.target.dataset.num].qty=Math.max(1,Math.round(parseFloat(e.target.value)||1));
+  }));
+  wrap.querySelectorAll('.cb').forEach(b=>b.addEventListener('click',e=>{calcPA(e.target.dataset.num);}));
+  wrap.querySelectorAll('.db').forEach(b=>b.addEventListener('click',e=>{
+    delete queued[e.target.dataset.num];
+    updateProgCounter();renderProgGrid();renderPAList();
+  }));
+}
+
+function renderPills(ctMap){
+  const top=Object.entries(ctMap).sort((a,b)=>b[1].load_min-a[1].load_min).slice(0,12);
+  if(!top.length)return'';
+  return`<div class="pc-pills">${top.map(([ct,d])=>`<div class="pill"><span class="pill-n">${ct}</span><span class="pill-v">${fmtH(d.load_min)}</span></div>`).join('')}</div>`;
+}
+
+// ── CALCULATE ─────────────────────────────────────────────────────────
+async function calcPA(num){
+  const btn=document.querySelector(`.cb[data-num="${num}"]`);
+  if(btn)btn.textContent='...';
+  const{pa,qty}=queued[num];
+  try{
+    const result=await fetch(API+'/api/calc/explode',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({items:[{pa:pa.mat,qty}]})
+    }).then(r=>r.json());
+    queued[num].ctMap=result;
+    // Build compMap from result
+    const compMap={};
+    for(const[ct,data]of Object.entries(result)){
+      compMap[ct]=data.components.map(c=>({
+        mat:c.mat,desc:c.desc,tipo:'',accQ:c.qty_total,
+        qtyTotal:c.qty_total,indirUnit:c.indir_unit,mins:c.mins
+      }));
+    }
+    queued[num].compMap=compMap;
+  }catch(e){console.error('calcPA error:',e);}
+  renderProgGrid();
+}
+
+async function calcAll(){
+  const keys=Object.keys(queued);
+  if(!keys.length)return;
+  // Batch call
+  const items=keys.map(num=>({pa:queued[num].pa.mat,qty:queued[num].qty}));
+  try{
+    const result=await fetch(API+'/api/calc/explode',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({items})
+    }).then(r=>r.json());
+    // Result is aggregated -- split back per PA
+    // For now: run individually (can optimize later)
+    await Promise.all(keys.map(num=>calcPA(num)));
+  }catch(e){
+    await Promise.all(keys.map(num=>calcPA(num)));
+  }
+  renderProgGrid();
+}
+
+function getGlobalMaps(){
+  const ctMap={},compMap={};
+  for(const{ctMap:cm,compMap:pm}of Object.values(queued)){
+    if(!cm)continue;
+    for(const[ct,data]of Object.entries(cm))ctMap[ct]=(ctMap[ct]||0)+data.load_min;
+    for(const[ct,items]of Object.entries(pm||{})){
+      if(!compMap[ct])compMap[ct]=[];
+      for(const item of items){
+        let e=compMap[ct].find(x=>x.mat===item.mat);
+        if(!e){e={...item,mins:0,qtyTotal:0};compMap[ct].push(e);}
+        e.mins+=item.mins;e.qtyTotal+=item.qtyTotal;
+      }
+    }
+  }
+  return{ctMap,compMap};
+}
+
+// ── CONSOLIDADO ───────────────────────────────────────────────────────
+function renderConsol(){
+  Object.keys(queued).forEach(n=>{if(!queued[n].ctMap)calcPA(n);});
+  const n=Object.keys(queued).length;
+  const pcs=Object.values(queued).reduce((s,{qty})=>s+qty,0);
+  document.getElementById('consolSub').textContent=n+' PA(s) · '+Math.round(pcs)+' peças · semana corrente';
+  const{ctMap,compMap}=getGlobalMaps();
+  globalCTMap=ctMap;globalCompMap=compMap;
+  renderSector(activeSector);
+}
+
+function renderSector(sector){
+  activeSector=sector;
+  document.querySelectorAll('.stab').forEach(t=>t.classList.toggle('active',t.dataset.sc===sector));
+  if(sector==='fab'){
+    if(!activeFabSector){renderFabSectorCards();return;}
+    renderFabSectorDetail(activeFabSector);return;
+  }
+  // Montagem
+  const body=document.getElementById('sectorBody');
+  body.innerHTML='';
+  const oldDet=document.getElementById('detPanel');if(oldDet)oldDet.remove();selectedCT=null;
+  const entries=Object.entries(globalCTMap).filter(([ct])=>!isFab(ct)).sort((a,b)=>b[1]-a[1]);
+  const maxLoad=entries[0]?.[1]||1;
+  const scroll=document.createElement('div');scroll.className='ct-scroll';
+  const tbl=document.createElement('table');tbl.className='ctt';
+  tbl.innerHTML=`<thead><tr><th>CT</th><th>Carga</th><th>Cap.</th><th style="width:44px;text-align:center">Turnos</th><th style="width:54px;text-align:center">H/Turno</th><th style="width:44px;text-align:center">Dias</th><th style="width:52px;text-align:center">Efic %</th><th style="width:48px">%</th><th style="width:90px">Barra</th><th style="width:62px">Status</th><th style="width:28px"></th></tr></thead>`;
+  const tbody=document.createElement('tbody');
+  buildCTRows(entries,tbody,maxLoad,'#9d84f5','mont');
+  tbl.appendChild(tbody);scroll.appendChild(tbl);body.appendChild(scroll);
+  const det=document.createElement('div');det.className='detail-panel closed';det.id='detPanel';document.body.appendChild(det);
+}
+
+function buildCTRows(entries,tbody,maxLoad,ctColor,sectorClass){
+  entries.forEach(([ct,load])=>{
+    const s=defS(ct);const cap=capMin(ct);const pct=cap>0?Math.round(load/cap*100):0;
+    const col=semC(pct);const bw=Math.min(Math.round(load/maxLoad*100),100);
+    const name=CT_NAMES[ct]||'';const tr=document.createElement('tr');tr.className='ct-main-tr';
+    tr.innerHTML=`
+      <td><div class="ct-name" style="color:${ctColor}">${ct}</div><div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-top:1px">${name}</div></td>
+      <td class="ct-load-val">${fmtH(load)}</td><td class="ct-cap-val">${fmtH(cap)}</td>
+      <td style="padding:2px 4px"><input class="tci" type="number" min="1" max="3" value="${s.turnos}" data-ct="${ct}" data-f="turnos"></td>
+      <td style="padding:2px 4px"><input class="tci" type="number" min="1" max="12" value="${s.hturno}" data-ct="${ct}" data-f="hturno"></td>
+      <td style="padding:2px 4px"><input class="tci" type="number" min="1" max="31" value="${s.dias}" data-ct="${ct}" data-f="dias"></td>
+      <td style="padding:2px 4px"><input class="tci" type="number" min="1" max="100" value="${s.efic}" data-ct="${ct}" data-f="efic"></td>
+      <td class="ct-pct" style="color:${col}">${pct}%</td>
+      <td><div class="ct-bar-bg"><div class="ct-bar-fill" style="width:${bw}%;background:${col}"></div></div></td>
+      <td class="ct-status" style="color:${col}">${semTxt(pct)}</td>
+      <td><span class="det-open" style="cursor:pointer;color:var(--text3);font-size:11px;padding:0 4px" data-ct="${ct}">▶</span></td>`;
+    tr.querySelectorAll('.tci').forEach(inp=>inp.addEventListener('change',e=>{
+      e.stopPropagation();const c=e.target.dataset.ct,f=e.target.dataset.f;
+      if(!ctSets[c])ctSets[c]={...defS(c)};ctSets[c][f]=parseFloat(e.target.value)||1;
+      saveCtSets();renderSector(activeSector);
+    }));
+    tr.querySelector('.det-open').addEventListener('click',e=>{e.stopPropagation();openDetail(ct,load,cap,pct,sectorClass);});
+    tr.addEventListener('click',e=>{if(e.target.classList.contains('tci'))return;openDetail(ct,load,cap,pct,sectorClass);});
+    tbody.appendChild(tr);
+  });
+}
+
+// ── FAB SECTOR CARDS ──────────────────────────────────────────────────
+function renderFabSectorCards(){
+  const body=document.getElementById('sectorBody');body.innerHTML='';
+  const oldDet=document.getElementById('detPanel');if(oldDet)oldDet.remove();selectedCT=null;
+  const lc=document.getElementById('linhaCards');if(lc)lc.style.display='flex';
+  const st=document.querySelector('.sector-tabs');if(st)st.style.display='';
+
+  const totals={};FAB_SECTORS.forEach(s=>totals[s.key]={load:0,cap:0});
+  Object.entries(globalCTMap).forEach(([ct,load])=>{const k=getSectorKey(ct);if(k){totals[k].load+=load;totals[k].cap+=capMin(ct);}});
+
+  const grid=document.createElement('div');grid.className='fab-sector-grid';
+  FAB_SECTORS.forEach(sector=>{
+    const{load,cap}=totals[sector.key];
+    const pct=cap>0?Math.min(Math.round(load/cap*100),200):0;
+    const col=semC(pct);const r=46,circ=Math.PI*r,fill=Math.min(pct/100,1)*circ;
+    const card=document.createElement('div');
+    card.style.cssText=`background:var(--s1);border:1px solid var(--border2);border-radius:8px;overflow:hidden;cursor:pointer;transition:all .2s;position:relative;`;
+    card.innerHTML=`<div style="height:4px;background:${sector.color};border-radius:2px 2px 0 0"></div>
+      <div style="padding:14px 16px 10px"><div style="font-size:16px;font-weight:800;color:${sector.color};margin-bottom:2px">${sector.label}</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3)">${sector.key}-xxx</div></div>
+      <div style="display:flex;justify-content:center;padding:4px 0">
+        <div style="position:relative;width:110px;height:60px;overflow:hidden">
+          <svg width="110" height="60" viewBox="0 0 110 60">
+            <path d="M9 53 A46 46 0 0 1 101 53" fill="none" stroke="var(--s4)" stroke-width="9" stroke-linecap="round"/>
+            <path d="M9 53 A46 46 0 0 1 101 53" fill="none" stroke="${col}" stroke-width="9" stroke-linecap="round" stroke-dasharray="${fill} ${circ}" style="filter:drop-shadow(0 0 3px ${col})"/>
+          </svg>
+          <div style="position:absolute;bottom:0;left:0;right:0;text-align:center;font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:${col}">${pct}%</div>
+        </div>
+      </div>
+      <div style="padding:6px 16px 14px;display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:10px;">
+        <span style="color:var(--text3)">Carga: <b style="color:var(--accent3)">${fmtH(load)}</b></span>
+        <span style="color:var(--text3)">Cap: <b style="color:var(--text2)">${fmtH(cap)}</b></span>
+      </div>`;
+    card.addEventListener('mouseenter',()=>card.style.transform='translateY(-2px)');
+    card.addEventListener('mouseleave',()=>card.style.transform='');
+    card.addEventListener('click',()=>{activeFabSector=sector.key;renderFabSectorDetail(sector.key);});
+    grid.appendChild(card);
+  });
+  body.appendChild(grid);
+}
+
+function renderFabSectorDetail(sectorKey,filterStatus='ALL',searchTerm=''){
+  const sector=FAB_SECTORS.find(s=>s.key===sectorKey);
+  const body=document.getElementById('sectorBody');body.innerHTML='';
+  const oldDet=document.getElementById('detPanel');if(oldDet)oldDet.remove();selectedCT=null;
+  const lc=document.getElementById('linhaCards');if(lc)lc.style.display='none';
+  const st=document.querySelector('.sector-tabs');if(st)st.style.display='none';
+
+  const backBar=document.createElement('div');
+  backBar.style.cssText='padding:8px 16px;border-bottom:1px solid var(--border);background:var(--s2);display:flex;align-items:center;gap:12px;flex-shrink:0;flex-wrap:wrap;';
+  backBar.innerHTML=`<button id="backToSectors" style="padding:4px 12px;border-radius:3px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-family:'JetBrains Mono',monospace;font-size:11px;cursor:pointer;">← Setores</button>
+    <span style="font-size:15px;font-weight:800;color:${sector.color}">${sector.label}</span>
+    <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3)">${sectorKey}-xxx</span>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:5px;background:var(--bg);border:1px solid var(--border2);border-radius:4px;padding:4px 8px;">
+        <input id="fabSectorSearch" placeholder="Buscar CT..." value="${searchTerm}" style="background:transparent;border:none;outline:none;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text);width:120px;">
+      </div>
+      <div style="display:flex;gap:4px;">
+        ${['ALL','CRÍTICO','ALERTA','OK'].map(s=>`<button class="fab-filter-btn" data-fs="${s}" style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;padding:3px 10px;border-radius:3px;cursor:pointer;border:1px solid ${filterStatus===s?(s==='CRÍTICO'?'var(--red)':s==='ALERTA'?'var(--yellow)':s==='OK'?'var(--green)':'var(--accent)'):'var(--border2)'};background:${filterStatus===s?(s==='CRÍTICO'?'rgba(239,68,68,.15)':s==='ALERTA'?'rgba(234,179,8,.15)':s==='OK'?'rgba(34,197,94,.15)':'rgba(58,123,213,.15)'):'transparent'};color:${filterStatus===s?(s==='CRÍTICO'?'var(--red)':s==='ALERTA'?'var(--yellow)':s==='OK'?'var(--green)':'var(--accent3)'):'var(--text3)'};">${s==='ALL'?'TODOS':s}</button>`).join('')}
+      </div>
+    </div>`;
+  body.appendChild(backBar);
+  document.getElementById('backToSectors').addEventListener('click',()=>{activeFabSector=null;renderFabSectorCards();});
+  document.getElementById('fabSectorSearch').addEventListener('input',e=>renderFabSectorDetail(sectorKey,filterStatus,e.target.value));
+  backBar.querySelectorAll('.fab-filter-btn').forEach(btn=>btn.addEventListener('click',()=>renderFabSectorDetail(sectorKey,btn.dataset.fs,document.getElementById('fabSectorSearch')?.value||'')));
+
+  const allEntries=Object.entries(globalCTMap).filter(([ct])=>ct.startsWith(sectorKey)).sort((a,b)=>b[1]-a[1]);
+  const maxLoad=allEntries[0]?.[1]||1;
+  const entries=allEntries.filter(([ct,load])=>{
+    const cap=capMin(ct),pct=cap>0?Math.round(load/cap*100):0;
+    const ms=filterStatus==='ALL'||semTxt(pct)===filterStatus;
+    const ss=!searchTerm||ct.toLowerCase().includes(searchTerm.toLowerCase())||(CT_NAMES[ct]||'').toLowerCase().includes(searchTerm.toLowerCase());
+    return ms&&ss;
+  });
+
+  const critico=allEntries.filter(([ct,l])=>{const c=capMin(ct);return c>0&&Math.round(l/c*100)>=100;}).length;
+  const alerta=allEntries.filter(([ct,l])=>{const c=capMin(ct);const p=c>0?Math.round(l/c*100):0;return p>=80&&p<100;}).length;
+  const sumBar=document.createElement('div');
+  sumBar.style.cssText='display:flex;gap:16px;padding:7px 16px;border-bottom:1px solid var(--border);background:var(--s1);flex-shrink:0;font-family:JetBrains Mono,monospace;font-size:11px;';
+  sumBar.innerHTML=`<span style="color:var(--text3)">${entries.length} de ${allEntries.length} CTs</span><span style="color:var(--red)">● ${critico} Crítico</span><span style="color:var(--yellow)">● ${alerta} Alerta</span><span style="color:var(--green)">● ${allEntries.length-critico-alerta} OK</span>`;
+  body.appendChild(sumBar);
+
+  const scroll=document.createElement('div');scroll.className='ct-scroll';
+  const tbl=document.createElement('table');tbl.className='ctt';tbl.style.width='100%';
+  tbl.innerHTML=`<thead><tr><th>CT</th><th>Carga</th><th>Cap.</th><th style="width:54px;text-align:center">Turnos</th><th style="width:64px;text-align:center">H/Turno</th><th style="width:54px;text-align:center">Dias</th><th style="width:62px;text-align:center">Efic %</th><th style="width:58px">%</th><th style="min-width:100px">Ocupação</th><th style="width:72px">Status</th><th style="width:28px"></th></tr></thead>`;
+  const tbody=document.createElement('tbody');
+  entries.forEach(([ct,load])=>{
+    const s=defS(ct),cap=capMin(ct),pct=cap>0?Math.round(load/cap*100):0;
+    const col=semC(pct),bw=Math.min(Math.round(load/maxLoad*100),100),name=CT_NAMES[ct]||'';
+    const tr=document.createElement('tr');tr.className='ct-main-tr';tr.style.borderBottom='1px solid var(--border2)';
+    tr.innerHTML=`
+      <td style="padding:10px 12px"><div class="ct-name" style="color:${sector.color}">${ct}</div><div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-top:2px">${name}</div></td>
+      <td style="padding:10px 12px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent3);font-weight:700">${fmtH(load)}</td>
+      <td style="padding:10px 12px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3)">${fmtH(cap)}</td>
+      <td style="padding:6px 4px"><input class="tci" type="number" min="1" max="3" value="${s.turnos}" data-ct="${ct}" data-f="turnos"></td>
+      <td style="padding:6px 4px"><input class="tci" type="number" min="1" max="12" value="${s.hturno}" data-ct="${ct}" data-f="hturno"></td>
+      <td style="padding:6px 4px"><input class="tci" type="number" min="1" max="31" value="${s.dias}" data-ct="${ct}" data-f="dias"></td>
+      <td style="padding:6px 4px"><input class="tci" type="number" min="1" max="100" value="${s.efic}" data-ct="${ct}" data-f="efic"></td>
+      <td style="padding:10px 8px;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:800;color:${col}">${pct}%</td>
+      <td style="padding:10px 12px"><div style="height:8px;background:var(--s4);border-radius:4px;overflow:hidden;min-width:60px"><div style="height:100%;width:${bw}%;background:${col};border-radius:4px"></div></div></td>
+      <td style="padding:10px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:${col}">${semTxt(pct)}</td>
+      <td style="padding:10px 6px;cursor:pointer;color:var(--text3);font-size:13px;text-align:center" class="det-open" data-ct="${ct}">▶</td>`;
+    tr.querySelectorAll('.tci').forEach(inp=>inp.addEventListener('change',e=>{
+      e.stopPropagation();const c=e.target.dataset.ct,f=e.target.dataset.f;
+      if(!ctSets[c])ctSets[c]={...defS(c)};ctSets[c][f]=parseFloat(e.target.value)||1;
+      saveCtSets();renderFabSectorDetail(sectorKey,filterStatus,searchTerm);
+    }));
+    tr.querySelector('.det-open').addEventListener('click',e=>{e.stopPropagation();openDetail(ct,load,cap,pct,'fab');});
+    tr.addEventListener('click',e=>{if(e.target.classList.contains('tci'))return;openDetail(ct,load,cap,pct,'fab');});
+    tbody.appendChild(tr);
+  });
+  if(!entries.length){tbody.innerHTML=`<tr><td colspan="11" style="padding:24px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3);text-align:center">Nenhum CT encontrado</td></tr>`;}
+  tbl.appendChild(tbody);scroll.appendChild(tbl);body.appendChild(scroll);
+  const det=document.createElement('div');det.className='detail-panel closed';det.id='detPanel';document.body.appendChild(det);
+}
+
+// ── OPEN DETAIL ───────────────────────────────────────────────────────
+function openDetail(ct,load,cap,pct,sectorClass){
+  const{ctMap,compMap}=getGlobalMaps();globalCTMap=ctMap;globalCompMap=compMap;selectedCT=ct;
+  const panel=document.getElementById('detPanel');if(!panel)return;
+  panel.classList.remove('closed');
+  const col=semC(pct),items=(globalCompMap[ct]||[]).slice();
+  let sortCol='mins',sortAsc=false;
+  function buildTable(){
+    const sorted=[...items].sort((a,b)=>{
+      let va,vb;
+      if(sortCol==='mat'){va=a.mat;vb=b.mat;}else if(sortCol==='desc'){va=a.desc;vb=b.desc;}
+      else if(sortCol==='qty'){va=a.qtyTotal;vb=b.qtyTotal;}else if(sortCol==='unit'){va=a.indirUnit;vb=b.indirUnit;}
+      else{va=a.mins;vb=b.mins;}
+      if(typeof va==='string')return sortAsc?va.localeCompare(vb):vb.localeCompare(va);
+      return sortAsc?va-vb:vb-va;
+    });
+    const maxM=sorted[0]?.mins||1;const ar=d=>d?'▲':'▼';
+    const ctNameStr=CT_NAMES[ct]||'';
+    panel.innerHTML=`
+      <div class="det-head">
+        <div><div class="det-ct-name ${sectorClass}">${ct}</div><div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);margin-top:1px">${ctNameStr}</div></div>
+        <button class="det-close" id="detClose">✕</button>
+      </div>
+      <div class="det-meta">Carga: <b>${fmtH(load)}</b> &nbsp;|&nbsp; Cap: <b>${fmtH(cap)}</b> &nbsp;|&nbsp; Ocupação: <b style="color:${col}">${pct}%</b> &nbsp;|&nbsp; ${items.length} componente(s)</div>
+      <div class="det-scroll">
+        ${sorted.length?`<table class="det-ops" style="width:100%;table-layout:auto">
+          <thead><tr>
+            <th class="sort-th" data-c="mat" style="width:108px;cursor:pointer">COD ${sortCol==='mat'?ar(sortAsc):''}</th>
+            <th class="sort-th" data-c="desc" style="cursor:pointer">DESCRIÇÃO ${sortCol==='desc'?ar(sortAsc):''}</th>
+            <th class="sort-th" data-c="qty" style="width:72px;cursor:pointer;text-align:right">QTD ${sortCol==='qty'?ar(sortAsc):''}</th>
+            <th class="sort-th" data-c="unit" style="width:62px;cursor:pointer;text-align:right">MIN/PC ${sortCol==='unit'?ar(sortAsc):''}</th>
+            <th class="sort-th" data-c="mins" style="width:72px;cursor:pointer;text-align:right">TOTAL MIN ${sortCol==='mins'?ar(sortAsc):''}</th>
+            <th style="width:60px;text-align:right">HORAS</th>
+          </tr></thead>
+          <tbody>${sorted.map(item=>{
+            const bw=Math.round(item.mins/maxM*100);
+            return`<tr><td style="font-family:JetBrains Mono,monospace;font-size:9px;color:var(--accent3)">${item.mat}</td>
+              <td style="font-size:11px;word-break:break-word;line-height:1.3">${item.desc}</td>
+              <td style="font-family:JetBrains Mono,monospace;font-size:10px;text-align:right;color:var(--text2)">${Math.round(item.qtyTotal)}</td>
+              <td style="font-family:JetBrains Mono,monospace;font-size:10px;text-align:right;color:var(--text3)">${item.indirUnit.toFixed(3)}</td>
+              <td style="font-family:JetBrains Mono,monospace;font-size:10px;text-align:right;color:var(--text2)">${item.mins.toFixed(1)}<div style="height:3px;background:var(--s4);border-radius:1px;margin-top:2px"><div style="height:100%;width:${bw}%;background:var(--accent2);border-radius:1px"></div></div></td>
+              <td style="font-family:JetBrains Mono,monospace;font-size:10px;text-align:right;color:var(--accent3)">${fmtH(item.mins)}</td></tr>`;
+          }).join('')}</tbody>
+        </table>`:'<div style="color:var(--text3);font-size:11px;padding:12px 0">Nenhum componente</div>'}
+      </div>`;
+    document.getElementById('detClose')?.addEventListener('click',()=>{panel.classList.add('closed');selectedCT=null;});
+    panel.querySelectorAll('.sort-th').forEach(th=>th.addEventListener('click',()=>{
+      const c=th.dataset.c;if(sortCol===c)sortAsc=!sortAsc;else{sortCol=c;sortAsc=(c==='mat'||c==='desc');}buildTable();
+    }));
+  }
+  buildTable();
+}
+
+// ── LINHA CARDS ───────────────────────────────────────────────────────
+function renderLinhaCards(){
+  const linhaLoad={};
+  for(const[num,{ctMap}]of Object.entries(queued)){
+    if(!ctMap)continue;
+    const linha=PA_LINHA[num]||'OUTROS';
+    const totalMins=Object.values(ctMap).reduce((s,d)=>s+d.load_min,0);
+    linhaLoad[linha]=(linhaLoad[linha]||0)+totalMins;
+  }
+  const entries=Object.entries(linhaLoad).sort((a,b)=>b[1]-a[1]);
+  const maxLoad=entries[0]?.[1]||1;
+  let container=document.getElementById('linhaCards');
+  if(!container){
+    container=document.createElement('div');container.id='linhaCards';
+    container.style.cssText='display:flex;gap:8px;padding:10px 18px;flex-wrap:wrap;flex-shrink:0;border-bottom:1px solid var(--border);background:var(--s2);overflow-x:auto;';
+    const st=document.querySelector('.sector-tabs');if(st)st.parentNode.insertBefore(container,st);
+  }
+  if(!entries.length){container.style.display='none';return;}
+  container.style.display='flex';
+  container.innerHTML=entries.map(([linha,mins])=>{
+    const pct=Math.round(mins/maxLoad*100);
+    const h=Math.floor(mins/60),m=Math.round(mins%60);
+    const hStr=(h>0?h+'h':'')+(m>0?m+'min':'');
+    let lPAs=0,lQty=0;
+    for(const[num,{qty,ctMap}]of Object.entries(queued)){if(!ctMap)continue;if((PA_LINHA[num]||'OUTROS')===linha){lPAs++;lQty+=qty;}}
+    return`<div style="background:var(--s1);border:1px solid var(--border2);border-radius:5px;padding:7px 12px;min-width:155px;flex-shrink:0;border-top:2px solid var(--accent2)">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:155px" title="${linha}">${linha}</div>
+      <div style="font-size:14px;font-weight:700;color:var(--accent3)">${hStr||'—'}</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-top:2px">${lPAs} PA · ${Math.round(lQty)} pc</div>
+      <div style="height:3px;background:var(--s4);border-radius:2px;margin-top:5px"><div style="height:100%;width:${pct}%;background:var(--accent2);border-radius:2px"></div></div>
+    </div>`;
+  }).join('');
+}
+
+// ── ROTEIROS POR CT ───────────────────────────────────────────────────
+function renderRCTList(){
+  const q=document.getElementById('rSrch')?.value.toLowerCase()||'';
+  const allCTs=Object.keys(CTI).sort();
+  if(!allCTs.length){const el=document.getElementById('rCTList');if(el)el.innerHTML='<div style="padding:12px;font-family:JetBrains Mono,monospace;font-size:10px;color:var(--text3)">Carregando...</div>';return;}
+  const list=allCTs.filter(ct=>{const sf=rSectorFilter==='ALL'?true:rSectorFilter==='fab'?isFab(ct):!isFab(ct);return sf&&(!q||ct.toLowerCase().includes(q));});
+  const el=document.getElementById('rCTList');if(!el)return;
+  const rCTCountEl=document.getElementById('rCTCount');if(rCTCountEl)rCTCountEl.textContent=list.length;
+  const frag=document.createDocumentFragment();
+  list.forEach(ct=>{
+    const d=document.createElement('div');d.className='pa-row'+(rActiveCT===ct?' on':'');
+    const n=CTI[ct]?.length||0;const prog=Object.values(queued).some(({ctMap})=>ctMap&&ct in ctMap);
+    const dotColor=isFab(ct)?'var(--accent2)':'#9d84f5',nameColor=isFab(ct)?'var(--accent3)':'#9d84f5';
+    const progSpan=prog?` · <span style="color:var(--green)">prog</span>`:'';
+    d.innerHTML=`<div class="pa-dot" style="background:${dotColor}"></div><div class="pa-ri"><div class="pa-rn" style="color:${nameColor}">${ct}</div><div style="font-size:10px;color:var(--text3)">${n} mat${progSpan}</div></div>`;
+    d.addEventListener('click',()=>{rActiveCT=ct;renderRCTList();renderRItems();});
+    frag.appendChild(d);
+  });
+  el.innerHTML='';el.appendChild(frag);
+}
+
+function renderRItems(){
+  const wrap=document.getElementById('rTableWrap');if(!rActiveCT||!wrap)return;
+  const rCTNameEl=document.getElementById('rCTName');
+  if(rCTNameEl)rCTNameEl.textContent=rActiveCT+(CT_NAMES[rActiveCT]?' · '+CT_NAMES[rActiveCT]:'');
+  const rawItems=CTI[rActiveCT]||[];
+  const enriched=rawItems.map(item=>{
+    const desc=item.desc||'—';
+    const paList=[];
+    for(const[num,{pa,qty,compMap}]of Object.entries(queued)){
+      if(!compMap)continue;
+      const entry=(compMap[rActiveCT]||[]).find(e=>e.mat===item.mat);
+      if(entry)paList.push({num,paDesc:pa.desc,qty,compQty:Math.round(entry.qtyTotal||0)});
+    }
+    return{...item,desc,progQty:paList.reduce((s,p)=>s+p.compQty,0),paList};
+  });
+  const q=(document.getElementById('rItemSrch')?.value||'').toLowerCase();
+  const filt=enriched.filter(x=>!q||x.mat.toLowerCase().includes(q)||x.desc.toLowerCase().includes(q)||(x.desc_op||'').toLowerCase().includes(q));
+  const rCTMetaEl=document.getElementById('rCTMeta');if(rCTMetaEl)rCTMetaEl.textContent=filt.length+' operações';
+  const ar=d=>d?'▲':'▼';
+  const srt=[...filt].sort((a,b)=>{
+    let va,vb;
+    if(rSortCol==='mat'){va=a.mat;vb=b.mat;}else if(rSortCol==='desc'){va=a.desc;vb=b.desc;}
+    else if(rSortCol==='op'){va=a.op;vb=b.op;}else if(rSortCol==='prog'){va=a.progQty;vb=b.progQty;}
+    else{va=a.indir;vb=b.indir;}
+    if(typeof va==='string')return rSortAsc?va.localeCompare(vb):vb.localeCompare(va);
+    return rSortAsc?va-vb:vb-va;
+  });
+  wrap.innerHTML='';
+  const tbl=document.createElement('table');tbl.className='det-ops';tbl.style.cssText='width:100%;table-layout:auto;';
+  tbl.innerHTML=`<thead><tr>
+    <th class="sort-th" data-rc="mat" style="width:108px;cursor:pointer">COD ${rSortCol==='mat'?ar(rSortAsc):''}</th>
+    <th class="sort-th" data-rc="desc" style="cursor:pointer">DESCRIÇÃO ${rSortCol==='desc'?ar(rSortAsc):''}</th>
+    <th class="sort-th" data-rc="op" style="width:52px;cursor:pointer;text-align:center">OP ${rSortCol==='op'?ar(rSortAsc):''}</th>
+    <th style="min-width:120px">DESC. OPERAÇÃO</th>
+    <th class="sort-th" data-rc="indir" style="width:80px;cursor:pointer;text-align:right">INDIR min/pc ${rSortCol==='indir'?ar(rSortAsc):''}</th>
+    <th class="sort-th" data-rc="prog" style="width:80px;cursor:pointer;text-align:right">QTD PROG ${rSortCol==='prog'?ar(rSortAsc):''}</th>
+    <th style="width:80px;text-align:right">TOTAL MIN</th>
+    <th style="width:24px"></th>
+  </tr></thead>`;
+  const tbody=document.createElement('tbody');
+  srt.forEach(item=>{
+    const ps=item.progQty>0?'color:var(--green)':'color:var(--text3)';
+    const hasPAs=item.paList&&item.paList.length>0;
+    const tr=document.createElement('tr');tr.style.cssText='border-bottom:1px solid var(--border);';
+    tr.innerHTML=`
+      <td style="padding:6px 8px;font-family:JetBrains Mono,monospace;font-size:10px;color:var(--accent3)">${item.mat}</td>
+      <td style="padding:6px 8px;font-size:11px;color:var(--text)">${item.desc}</td>
+      <td style="padding:6px 8px;font-family:JetBrains Mono,monospace;font-size:10px;text-align:center;color:var(--text2)">${item.op||''}</td>
+      <td style="padding:6px 8px;font-size:10px;color:var(--text3)">${item.desc_op||''}</td>
+      <td style="padding:6px 8px;font-family:JetBrains Mono,monospace;font-size:10px;text-align:right;color:var(--text2)">${(item.indir||0).toFixed(3)}</td>
+      <td style="padding:6px 8px;font-family:JetBrains Mono,monospace;font-size:10px;text-align:right;${ps}">${item.progQty>0?Math.round(item.progQty):'—'}</td>
+      <td style="padding:6px 8px;font-family:JetBrains Mono,monospace;font-size:10px;text-align:right;color:var(--accent3)">${item.progQty>0?fmtH(item.progQty*item.indir):'—'}</td>
+      <td style="padding:6px 4px;text-align:center;font-size:11px;color:${hasPAs?'var(--accent2)':'var(--text3)'};cursor:${hasPAs?'pointer':'default'}">${hasPAs?'▶':''}</td>`;
+    if(hasPAs){
+      const trExp=document.createElement('tr');
+      trExp.style.cssText='display:none;background:var(--s2);border-bottom:1px solid var(--border);';
+      trExp.innerHTML=`<td colspan="8" style="padding:6px 12px 8px 24px;">${item.paList.map(p=>`<div style="display:flex;align-items:center;gap:8px;padding:3px 0;border-bottom:1px solid var(--border);"><span style="font-family:JetBrains Mono,monospace;font-size:10px;color:var(--accent3);width:100px;flex-shrink:0">${p.num}</span><span style="font-size:11px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.paDesc}</span><span style="font-family:JetBrains Mono,monospace;font-size:10px;color:var(--text3);flex-shrink:0">${p.qty} PA</span><span style="font-family:JetBrains Mono,monospace;font-size:10px;color:var(--green);flex-shrink:0">→ ${Math.round(p.compQty)} pc</span></div>`).join('')}</td>`;
+      tr.addEventListener('click',()=>{const o=trExp.style.display!=='none';trExp.style.display=o?'none':'table-row';tr.querySelector('td:last-child').textContent=o?'▶':'▼';});
+      tbody.appendChild(tr);tbody.appendChild(trExp);
+    } else {tbody.appendChild(tr);}
+  });
+  tbl.appendChild(tbody);wrap.appendChild(tbl);
+  tbl.querySelectorAll('.sort-th').forEach(th=>th.addEventListener('click',()=>{const c=th.dataset.rc;if(rSortCol===c)rSortAsc=!rSortAsc;else{rSortCol=c;rSortAsc=(c==='mat'||c==='desc'||c==='op');}renderRItems();}));
+}
+
+// ── XLS IMPORT ────────────────────────────────────────────────────────
+document.getElementById('xlsIn').addEventListener('change',function(e){
+  const file=e.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=function(ev){
+    const wb=XLSX.read(ev.target.result,{type:'array'});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const rows=XLSX.utils.sheet_to_json(ws,{header:1});
+    const hdr=rows[0].map(h=>String(h||'').toUpperCase());
+    const pi=hdr.findIndex(h=>h.includes('PA')||h.includes('MATERIAL')||h.includes('COD'));
+    const qi=hdr.findIndex(h=>h.includes('QTD')||h.includes('QUANT')||h.includes('QTY'));
+    if(pi<0){alert('Coluna PA não encontrada.');return;}
+    rows.slice(1).forEach(row=>{
+      const num=String(row[pi]||'').trim();const qty=Math.round(parseFloat(row[qi])||1);
+      const pa=ALL_PAS.find(p=>p.mat===num);
+      if(!pa)return;
+      if(queued[num]){queued[num].qty+=qty;queued[num].ctMap=null;queued[num].compMap=null;}
+      else{queued[num]={pa,qty,ctMap:null,compMap:null};}
+    });
+    updateProgCounter();renderProgGrid();renderPAList();
+  };
+  reader.readAsArrayBuffer(file);e.target.value='';
+});
+
+// ── EVENTS ────────────────────────────────────────────────────────────
+function setupEvents(){
+  document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
+    const s=t.dataset.s;
+    document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===t));
+    document.querySelectorAll('.screen').forEach(sc=>sc.classList.remove('on'));
+    document.getElementById('s'+s)?.classList.add('on');
+    if(s==='Consol'){activeFabSector=null;renderConsol();}
+    if(s==='Roteiros'){if(Object.keys(CTI).length)renderRCTList();else setTimeout(renderRCTList,500);}
+  }));
+  document.getElementById('srch').addEventListener('input',e=>{srchQ=e.target.value;renderPAList();});
+  document.querySelectorAll('.chip').forEach(c=>c.addEventListener('click',()=>{
+    filterT=c.dataset.t;document.querySelectorAll('.chip').forEach(x=>x.classList.toggle('on',x===c));renderPAList();
+  }));
+  document.getElementById('calcAll').addEventListener('click',()=>{calcAll().then(()=>{renderProgGrid();});});
+  document.getElementById('recalcBtn')?.addEventListener('click',()=>{calcAll().then(()=>{renderLinhaCards();renderConsol();});});
+  document.getElementById('clearProg')?.addEventListener('click',()=>{queued={};updateProgCounter();renderProgGrid();renderPAList();});
+  document.querySelectorAll('.stab').forEach(t=>t.addEventListener('click',()=>renderSector(t.dataset.sc)));
+  document.addEventListener('click',e=>{
+    const btn=e.target.closest('[data-rs]');if(!btn)return;
+    rSectorFilter=btn.dataset.rs;
+    document.querySelectorAll('[data-rs]').forEach(x=>x.classList.toggle('on',x===btn));renderRCTList();
+  });
+  document.addEventListener('input',e=>{
+    if(e.target.id==='rSrch')renderRCTList();
+    if(e.target.id==='rItemSrch')renderRItems();
+  });
+  document.addEventListener('click',e=>{
+    if(e.target.id==='rCompSearchBtn'){const val=document.getElementById('rCompSearch')?.value?.trim();if(val)searchByComponent(val);}
+  });
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Enter'&&e.target.id==='rCompSearch'){const val=e.target.value?.trim();if(val)searchByComponent(val);}
+  });
+}
+
+function searchByComponent(code){
+  const wrap=document.getElementById('rTableWrap');
+  const rCTNameEl=document.getElementById('rCTName');if(rCTNameEl)rCTNameEl.textContent='Componente: '+code;
+  const results=[];
+  for(const[ct,items]of Object.entries(CTI)){
+    const item=items.find(x=>x.mat===code||x.mat.toLowerCase()===code.toLowerCase());
+    if(!item)continue;
+    const paList=[];
+    for(const[num,{pa,qty,compMap}]of Object.entries(queued)){
+      if(!compMap)continue;const entry=(compMap[ct]||[]).find(e=>e.mat===item.mat);
+      if(entry)paList.push({num,paDesc:pa.desc,qty,compQty:Math.round(entry.qtyTotal||0)});
+    }
+    results.push({ct,item,desc:item.desc||'—',progQty:paList.reduce((s,p)=>s+p.compQty,0),paList});
+  }
+  const rCTMetaEl=document.getElementById('rCTMeta');if(rCTMetaEl)rCTMetaEl.textContent=results.length+' CTs contêm este componente';
+  if(!results.length){wrap.innerHTML=`<div class="prog-empty" style="height:160px"><div class="prog-empty-icon">◈</div><div>Componente não encontrado</div></div>`;return;}
+  wrap.innerHTML='';
+  const tbl=document.createElement('table');tbl.className='det-ops';tbl.style.cssText='width:100%;';
+  tbl.innerHTML=`<thead><tr><td colspan="5" style="padding:8px 10px;font-size:12px;font-weight:700;color:var(--text);border-bottom:1px solid var(--border)"><span style="font-family:JetBrains Mono,monospace;color:var(--accent3)">${code}</span> · ${results[0]?.desc||''}</td></tr><tr><th style="width:100px">CT</th><th>Nome CT</th><th style="width:80px;text-align:right">INDIR min/pc</th><th style="width:90px;text-align:right">QTD PROG</th><th style="width:28px"></th></tr></thead>`;
+  const tbody=document.createElement('tbody');
+  results.forEach(({ct,item,desc,progQty,paList})=>{
+    const hasPAs=paList.length>0;const ps=progQty>0?'color:var(--green)':'color:var(--text3)';
+    const sec=FAB_SECTORS.find(s=>ct.startsWith(s.key));const ctColor=sec?sec.color:'#a78bfa';
+    const tr=document.createElement('tr');tr.style.cssText='border-bottom:1px solid var(--border);cursor:'+(hasPAs?'pointer':'default')+';';
+    tr.innerHTML=`<td style="padding:7px 8px;font-family:JetBrains Mono,monospace;font-size:11px;font-weight:700;color:${ctColor}">${ct}</td><td style="padding:7px 8px;font-size:11px;color:var(--text2)">${CT_NAMES[ct]||'—'}</td><td style="padding:7px 8px;font-family:JetBrains Mono,monospace;font-size:10px;text-align:right;color:var(--text2)">${(item.indir||0).toFixed(3)}</td><td style="padding:7px 8px;font-family:JetBrains Mono,monospace;font-size:10px;text-align:right;${ps}">${progQty>0?Math.round(progQty):'—'}</td><td style="padding:7px 6px;text-align:center;font-size:11px;color:${hasPAs?'var(--accent2)':'var(--text3)'};cursor:${hasPAs?'pointer':'default'}">${hasPAs?'▶':''}</td>`;
+    if(hasPAs){
+      const trExp=document.createElement('tr');trExp.style.cssText='display:none;background:var(--s2);border-bottom:1px solid var(--border);';
+      trExp.innerHTML=`<td colspan="5" style="padding:6px 12px 8px 24px;">${paList.map(p=>`<div style="display:flex;align-items:center;gap:8px;padding:3px 0;border-bottom:1px solid var(--border);"><span style="font-family:JetBrains Mono,monospace;font-size:10px;color:var(--accent3);width:100px;flex-shrink:0">${p.num}</span><span style="font-size:11px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.paDesc}</span><span style="font-family:JetBrains Mono,monospace;font-size:10px;color:var(--text3);flex-shrink:0">${p.qty} PA</span><span style="font-family:JetBrains Mono,monospace;font-size:10px;color:var(--green);flex-shrink:0">→ ${Math.round(p.compQty)} pc</span></div>`).join('')}</td>`;
+      tr.addEventListener('click',()=>{const o=trExp.style.display!=='none';trExp.style.display=o?'none':'table-row';tr.querySelector('td:last-child').textContent=o?'▶':'▼';});
+      tbody.appendChild(tr);tbody.appendChild(trExp);
+    }else{tbody.appendChild(tr);}
+  });
+  tbl.appendChild(tbody);wrap.appendChild(tbl);
+}
+
+init();
+</script>
+</body>
+</html>
