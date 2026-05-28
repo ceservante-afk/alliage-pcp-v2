@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 from app.db import execute
+from app.cache import get_pa_linha
 
 router = APIRouter()
 
@@ -7,24 +8,23 @@ router = APIRouter()
 async def get_pas():
     rows = execute("""
         SELECT mat, descricao as desc, tipo
-        FROM bom_nodes
-        WHERE depth = 1
+        FROM bom_nodes WHERE depth = 1
         ORDER BY descricao
     """)
     return rows
 
 @router.get("/pa_linha")
-async def get_pa_linha():
-    """Return PA -> linha mapping."""
-    rows = execute("SELECT pa, linha FROM pa_linha")
-    return {r['pa']: r['linha'] for r in rows}
+async def get_pa_linha_endpoint():
+    """Return PA -> linha mapping (cached)."""
+    return get_pa_linha()
 
 @router.get("/tree/{pa_mat}")
 async def get_tree(pa_mat: str):
     rows = execute("""
-        SELECT mat, descricao as desc, tipo, qty, umd, parent_mat, depth
-        FROM bom_nodes
-        WHERE pa_root = %s
+        SELECT mat, descricao as desc, tipo,
+               CAST(qty AS FLOAT) as qty,
+               umd, parent_mat, depth
+        FROM bom_nodes WHERE pa_root = %s
         ORDER BY depth, mat
     """, (pa_mat,))
     if not rows:
