@@ -94,7 +94,7 @@ body{background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;di
 .db:hover{border-color:var(--red);color:var(--red);}
 
 /* CONSOLIDADO */
-.consol-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;}
+.consol-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;height:100%;}
 .consol-topbar{padding:10px 20px;border-bottom:1px solid var(--border);background:var(--s1);display:flex;align-items:center;gap:14px;flex-shrink:0;}
 .consol-title{font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;font-family:'JetBrains Mono',monospace;color:var(--text2);}
 .consol-sub{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);}
@@ -104,7 +104,7 @@ body{background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;di
 .stab{padding:6px 14px;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;font-family:'JetBrains Mono',monospace;}
 .stab.active.fab{color:var(--accent3);border-bottom-color:var(--accent2);}
 .stab.active.mont{color:#7a9ab2;border-bottom-color:#4a6a82;}
-.sector-body{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;}
+.sector-body{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;height:100%;}
 
 /* CT TABLE */
 table.ctt{width:100%;border-collapse:collapse;}
@@ -156,7 +156,16 @@ table.ctt th{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--te
 .linha-card-bar-fill{height:100%;background:var(--accent2);}
 
 /* FAB SECTOR GRID */
-.fab-sector-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:10px;flex:1;min-height:0;overflow:hidden;}
+.fab-sector-grid{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  grid-template-rows:repeat(2,1fr);
+  gap:8px;
+  padding:10px;
+  flex:1;
+  min-height:0;
+  overflow:hidden;
+}
 
 /* ROTEIROS */
 .prog-wrap::-webkit-scrollbar{width:3px;}
@@ -641,15 +650,15 @@ function renderFabSectorCards(){
     const pct=cap>0?Math.min(Math.round(load/cap*100),200):0;
     const col=semC(pct);const r=46,circ=Math.PI*r,fill=Math.min(pct/100,1)*circ;
     const card=document.createElement('div');
-    card.style.cssText=`background:var(--s2);border:1px solid var(--border);overflow:hidden;cursor:pointer;transition:background .15s;`;
+    card.style.cssText=`background:var(--s2);border:1px solid var(--border);overflow:hidden;cursor:pointer;transition:background .15s;display:flex;flex-direction:column;`;
     card.innerHTML=`<div style="height:2px;background:var(--accent2)"></div>
       <div style="padding:10px 12px 6px">
         <div style="font-size:12px;font-weight:700;color:var(--text2);letter-spacing:.14em;text-transform:uppercase;font-family:'JetBrains Mono',monospace">${sector.label}</div>
       </div>
-      <div style="display:flex;justify-content:center;padding:4px 0">
+      <div style="display:flex;justify-content:center;padding:4px 0;flex:1;align-items:center">
         <div style="position:relative;width:100px;height:54px;overflow:hidden">
           <svg width="100" height="54" viewBox="0 0 110 60">
-            <path d="M9 53 A46 46 0 0 1 101 53" fill="none" stroke="var(--s4)" stroke-width="9" stroke-linecap="round"/>
+            <path d="M9 53 A46 46 0 0 1 101 53" fill="none" stroke="var(--border2)" stroke-width="10" stroke-linecap="butt"/>
             <path d="M9 53 A46 46 0 0 1 101 53" fill="none" stroke="${col}" stroke-width="9" stroke-linecap="round" stroke-dasharray="${fill} ${circ}" />
           </svg>
           <div style="position:absolute;bottom:0;left:0;right:0;text-align:center;font-family:'JetBrains Mono',monospace;font-size:17px;font-weight:800;color:${col};letter-spacing:.02em">${pct}%</div>
@@ -817,7 +826,7 @@ function renderLinhaCards(){
   let container=document.getElementById('linhaCards');
   if(!container){
     container=document.createElement('div');container.id='linhaCards';
-    container.style.cssText='display:flex;gap:8px;padding:10px 16px;flex-wrap:wrap;flex-shrink:0;border-bottom:1px solid var(--border);background:var(--s1);overflow-x:auto;';
+    container.style.cssText='display:flex;gap:8px;padding:8px 14px;flex-wrap:nowrap;flex-shrink:0;border-bottom:1px solid var(--border);background:var(--s1);overflow-x:auto;max-height:130px;';
     const st=document.querySelector('.sector-tabs');if(st)st.parentNode.insertBefore(container,st);
   }
   if(!entries.length){container.style.display='none';return;}
