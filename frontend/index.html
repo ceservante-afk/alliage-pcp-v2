@@ -141,6 +141,7 @@ table.ctt th{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t
 .sort-th:hover{color:var(--accent3)!important;background:rgba(26,111,181,.08);}
 
 /* FAB SECTOR */
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 .fab-sector-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;padding:20px;overflow-y:auto;align-content:start;flex:1;min-height:0;}
 </style>
 </head>
@@ -162,6 +163,7 @@ table.ctt th{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t
   <div class="tab active" data-s="Prog">Programação</div>
   <div class="tab" data-s="Consol">Consolidado CTs</div>
   <div class="tab" data-s="Roteiros">Roteiros por CT</div>
+  <div class="tab" data-s="Arvore">Árvore BOM</div>
 </div>
 
 <!-- PROGRAMAÇÃO -->
@@ -886,6 +888,7 @@ function setupEvents(){
     document.getElementById('s'+s)?.classList.add('on');
     if(s==='Consol'){activeFabSector=null;renderConsol();}
     if(s==='Roteiros'){if(Object.keys(CTI).length)renderRCTList();else setTimeout(renderRCTList,500);}
+    if(s==='Arvore'){renderTPAList();}
   }));
   document.getElementById('srch').addEventListener('input',e=>{srchQ=e.target.value;renderPAList();});
   document.querySelectorAll('.chip').forEach(c=>c.addEventListener('click',()=>{
@@ -900,6 +903,7 @@ function setupEvents(){
     rSectorFilter=btn.dataset.rs;
     document.querySelectorAll('[data-rs]').forEach(x=>x.classList.toggle('on',x===btn));renderRCTList();
   });
+  document.getElementById('tSrch')?.addEventListener('input',()=>renderTPAList());
   document.addEventListener('input',e=>{
     if(e.target.id==='rSrch')renderRCTList();
     if(e.target.id==='rItemSrch')renderRItems();
@@ -947,7 +951,136 @@ function searchByComponent(code){
   tbl.appendChild(tbody);wrap.appendChild(tbl);
 }
 
+// ── ÁRVORE BOM ────────────────────────────────────────────────────────
+let treeData=null, tExpanded=new Set(), tSrchQ='', tFiltered=[];
+
+function renderTPAList(){
+  const q=(document.getElementById('tSrch')?.value||'').toLowerCase();
+  tFiltered=ALL_PAS.filter(p=>!q||p.mat.toLowerCase().includes(q)||p.desc.toLowerCase().includes(q));
+  const el=document.getElementById('tPAList');
+  if(!el)return;
+  document.getElementById('tPACount').textContent=tFiltered.length;
+  const frag=document.createDocumentFragment();
+  tFiltered.forEach(pa=>{
+    const d=document.createElement('div');
+    d.className='pa-row'+(treeData&&treeData.mat===pa.mat?' on':'');
+    d.innerHTML=`<div class="pa-dot" style="background:${tc(pa.tipo)}"></div>
+      <div class="pa-ri"><div class="pa-rn">${pa.mat}</div><div class="pa-rd" title="${pa.desc}">${pa.desc}</div></div>`;
+    d.addEventListener('click',()=>loadTree(pa));
+    frag.appendChild(d);
+  });
+  el.innerHTML='';el.appendChild(frag);
+}
+
+async function loadTree(pa){
+  const wrap=document.getElementById('tTreeWrap');
+  wrap.innerHTML='<div class="prog-empty"><div class="prog-empty-icon" style="animation:spin 1s linear infinite">◈</div><div>Carregando estrutura...</div></div>';
+  document.getElementById('tPAName').textContent=pa.mat+' · '+pa.desc;
+  try{
+    treeData=await api('/api/bom/tree/'+pa.mat);
+    tExpanded=new Set();
+    renderTree();
+    document.getElementById('tControls').style.display='flex';
+  }catch(e){
+    wrap.innerHTML='<div class="prog-empty"><div>Erro ao carregar estrutura</div></div>';
+  }
+  renderTPAList();
+}
+
+function renderTree(){
+  const wrap=document.getElementById('tTreeWrap');
+  if(!treeData){wrap.innerHTML='';return;}
+  wrap.innerHTML='';
+  const ul=document.createElement('div');
+  renderNode(treeData,ul,0,'root');
+  wrap.appendChild(ul);
+}
+
+function renderNode(node,container,depth,nodeId){
+  const hasChildren=node.children&&node.children.length>0;
+  const isExp=tExpanded.has(nodeId);
+  const hasRot=CTI&&CTI[node.mat];
+  const row=document.createElement('div');
+  row.style.cssText=`display:flex;align-items:flex-start;gap:4px;padding:3px 0 3px ${depth*18}px;border-bottom:1px solid var(--border);`;
+  
+  // expand toggle
+  const tog=document.createElement('span');
+  tog.style.cssText='width:14px;flex-shrink:0;cursor:'+(hasChildren?'pointer':'default')+';color:var(--text3);font-size:10px;margin-top:1px;';
+  tog.textContent=hasChildren?(isExp?'▼':'▶'):'·';
+  
+  // content
+  const info=document.createElement('div');
+  info.style.flex='1';
+  const ctBadges=hasRot?CTI[node.mat].map(op=>`<span style="font-family:'JetBrains Mono',monospace;font-size:8px;padding:1px 4px;border-radius:2px;background:rgba(58,123,213,.15);border:1px solid var(--accent);color:var(--accent3);margin-left:3px">${op.ct||''}</span>`).slice(0,3).join(''):'';
+  info.innerHTML=`
+    <div style="display:flex;align-items:center;flex-wrap:wrap;gap:2px;">
+      <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent3)">${node.mat}</span>
+      ${ctBadges}
+    </div>
+    <div style="font-size:11px;color:var(--text2)">${node.desc||'—'}</div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3)">${node.tipo||''} ${node.qty?'· qty: '+node.qty:''} ${node.umd||''}</div>`;
+  
+  row.appendChild(tog);row.appendChild(info);
+  container.appendChild(row);
+
+  if(hasChildren){
+    tog.addEventListener('click',()=>{
+      if(tExpanded.has(nodeId))tExpanded.delete(nodeId);
+      else tExpanded.add(nodeId);
+      renderTree();
+    });
+    if(isExp){
+      node.children.forEach((child,i)=>{
+        renderNode(child,container,depth+1,nodeId+'_'+i);
+      });
+    }
+  }
+}
+
+function tExpAll(){
+  function addAll(node,id){
+    if(node.children&&node.children.length){
+      tExpanded.add(id);
+      node.children.forEach((c,i)=>addAll(c,id+'_'+i));
+    }
+  }
+  if(treeData)addAll(treeData,'root');
+  renderTree();
+}
+
+function tColAll(){
+  tExpanded=new Set();
+  if(treeData)renderTree();
+}
+
+
 init();
 </script>
+
+<!-- ═══ TELA: ÁRVORE BOM ═══ -->
+<div class="screen" id="sArvore">
+  <div class="sb" style="width:280px">
+    <div class="sb-head">
+      <div class="sb-search">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input id="tSrch" placeholder="Buscar PA...">
+      </div>
+    </div>
+    <div class="sb-cnt"><b id="tPACount">—</b> PAs</div>
+    <div class="sb-list" id="tPAList"></div>
+  </div>
+  <div class="prog-main">
+    <div class="prog-bar" style="gap:10px;flex-shrink:0;">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--accent3)" id="tPAName">Selecione um PA</div>
+      <div id="tControls" style="display:none;margin-left:auto;display:flex;gap:6px;">
+        <button onclick="tExpAll()" style="padding:3px 10px;border-radius:3px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer;">Expandir Tudo</button>
+        <button onclick="tColAll()" style="padding:3px 10px;border-radius:3px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer;">Recolher</button>
+      </div>
+    </div>
+    <div class="prog-wrap" id="tTreeWrap" style="padding:8px 14px;">
+      <div class="prog-empty"><div class="prog-empty-icon">◈</div><div>← Selecione um PA para ver a estrutura</div></div>
+    </div>
+  </div>
+</div>
 </body>
 </html>
