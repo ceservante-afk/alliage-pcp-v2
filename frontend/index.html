@@ -520,12 +520,16 @@ async function calcAll(){
   const total=keys.length;
   let done=0;
   const ps=document.getElementById('progSummary');
-  // Calculate sequentially to show progress
-  for(const num of keys){
-    if(ps)ps.textContent=`Calculando...  ${done}/${total}`;
-    await calcPA(num);
-    done++;
-    if(ps)ps.textContent=`Calculando...  ${done}/${total}`;
+  if(ps)ps.textContent=`Calculando...  0/${total}`;
+  // Calculate in small batches of 5 to show progress without timeout
+  const batchSize=5;
+  for(let i=0;i<keys.length;i+=batchSize){
+    const batch=keys.slice(i,i+batchSize);
+    await Promise.all(batch.map(async num=>{
+      await calcPA(num);
+      done++;
+      if(ps)ps.textContent=`Calculando...  ${done}/${total}`;
+    }));
   }
   updateProgCounter();
   renderProgGrid();
@@ -561,6 +565,7 @@ function renderConsol(){
   document.getElementById('consolSub').textContent=n+' PA(s)  ·  '+Math.round(pcs).toLocaleString('pt-BR')+' peças programadas';
   const{ctMap,compMap}=getGlobalMaps();
   globalCTMap=ctMap;globalCompMap=compMap;
+  renderLinhaCards();
   renderSector(activeSector);
 }
 
@@ -799,15 +804,20 @@ function openDetail(ct,load,cap,pct,sectorClass){
 
 // ── LINHA CARDS ───────────────────────────────────────────────────────
 function renderLinhaCards(){
-  const linhaLoad={};
-  for(const[num,{ctMap}]of Object.entries(queued)){
+  const linhaData={};
+  for(const[num,{ctMap,qty}]of Object.entries(queued)){
     if(!ctMap)continue;
     const linha=PA_LINHA[num]||'OUTROS';
-    const totalMins=Object.values(ctMap).reduce((s,d)=>s+d.load_min,0);
-    linhaLoad[linha]=(linhaLoad[linha]||0)+totalMins;
+    if(!linhaData[linha])linhaData[linha]={fabMins:0,montMins:0,qty:0,pas:0};
+    linhaData[linha].qty+=qty;
+    linhaData[linha].pas++;
+    for(const[ct,d]of Object.entries(ctMap)){
+      const load=typeof d==='object'?d.load_min:parseFloat(d)||0;
+      if(isFab(ct))linhaData[linha].fabMins+=load;
+      else linhaData[linha].montMins+=load;
+    }
   }
-  const entries=Object.entries(linhaLoad).sort((a,b)=>b[1]-a[1]);
-  const maxLoad=entries[0]?.[1]||1;
+  const entries=Object.entries(linhaData).sort((a,b)=>(b[1].fabMins+b[1].montMins)-(a[1].fabMins+a[1].montMins));
   let container=document.getElementById('linhaCards');
   if(!container){
     container=document.createElement('div');container.id='linhaCards';
@@ -816,39 +826,38 @@ function renderLinhaCards(){
   }
   if(!entries.length){container.style.display='none';return;}
   container.style.display='flex';
-  container.innerHTML=entries.map(([linha,mins])=>{
-    const pct=Math.round(mins/maxLoad*100);
-    const h=Math.floor(mins/60),m=Math.round(mins%60);
-    const hStr=(h>0?h+'h':'')+(m>0?m+'min':'');
-    let lPAs=0,lQty=0;
-    for(const[num,{qty,ctMap}]of Object.entries(queued)){if(!ctMap)continue;if((PA_LINHA[num]||'OUTROS')===linha){lPAs++;lQty+=qty;}}
-    // Split fmtH into hours and minutes for better display
-    const hh=Math.floor(mins/60),mm=Math.round(mins%60);
-    const hDisplay=hh>0?hh+'h ':''+(mm>0?String(mm).padStart(2,'0')+'m':'00m');
-    // Calculate fab vs mont load for this linha
-    let fabMins=0,montMins=0;
-    for(const[num2,{ctMap:cm2}]of Object.entries(queued)){
-      if(!cm2)continue;if((PA_LINHA[num2]||'OUTROS')!==linha)continue;
-      for(const[ct2,d2]of Object.entries(cm2)){
-        const load2=typeof d2==='object'?d2.load_min:d2;
-        if(isFab(ct2))fabMins+=load2;else montMins+=load2;
-      }
-    }
-    const fH=Math.floor(fabMins/60),fM=Math.round(fabMins%60);
-    const mH=Math.floor(montMins/60),mM=Math.round(montMins%60);
-    const fabStr=(fH>0?fH+'h ':'')+String(fM).padStart(2,'0')+'m';
-    const montStr=(mH>0?mH+'h ':'')+String(mM).padStart(2,'0')+'m';
-    return`<div class="linha-card" title="${linha}">
-      <div class="linha-card-label">${linha}</div>
-      <div class="linha-card-qty">${Math.round(lQty)}</div>
-      <div class="linha-card-unit">peças · ${lPAs} PA</div>
-      <div class="linha-card-times">
-        <div class="linha-card-time"><span class="linha-card-time-label">FAB</span><span class="linha-card-time-val">${fabMins>0?fabStr:'—'}</span></div>
-        <div class="linha-card-time"><span class="linha-card-time-label">MONT</span><span class="linha-card-time-val">${montMins>0?montStr:'—'}</span></div>
+
+  function fmt(m){
+    if(!m)return'0h 00m';
+    const h=Math.floor(m/60),mm=Math.round(m%60);
+    return h+'h '+String(mm).padStart(2,'0')+'m';
+  }
+
+  container.innerHTML=entries.map(([linha,d])=>`
+    <div style="background:var(--s2);border:1px solid var(--border);padding:10px 14px;min-width:185px;flex-shrink:0;border-top:2px solid var(--accent2);">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--text3);text-transform:uppercase;letter-spacing:.12em;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:170px" title="${linha}">${linha}</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:800;color:var(--text);line-height:1">${Math.round(d.qty)}</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-bottom:8px">peças · ${d.pas} PA</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;">
+        <div>
+          <div style="display:flex;align-items:center;gap:3px;margin-bottom:2px">
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text3)"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Fabricação</span>
+          </div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);font-weight:700">${fmt(d.fabMins)}</div>
+        </div>
+        <div>
+          <div style="display:flex;align-items:center;gap:3px;margin-bottom:2px">
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text3)"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Montagem</span>
+          </div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);font-weight:700">${fmt(d.montMins)}</div>
+        </div>
       </div>
-      <div class="linha-card-bar"><div class="linha-card-bar-fill" style="width:${pct}%"></div></div>
-    </div>`;
-  }).join('');
+      <div style="height:2px;background:var(--border2)">
+        <div style="height:100%;width:${Math.min(100,Math.round((d.fabMins+d.montMins)/Math.max(...Object.values(linhaData).map(x=>x.fabMins+x.montMins))*100))}%;background:var(--accent2)"></div>
+      </div>
+    </div>`).join('');
 }
 
 // ── ROTEIROS POR CT ───────────────────────────────────────────────────
