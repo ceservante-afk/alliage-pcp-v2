@@ -309,7 +309,7 @@ function fmtH(m){
   const h=Math.floor(m/60),mn=Math.round(m%60);
   return h+'h'+(mn>0?' '+String(mn).padStart(2,'0')+'m':'');
 }
-function semC(p){return p>=100?'#b91c1c':p>=80?'#92400e':'#166534';}
+function semC(p){return p>=100?'#ef4444':p>=80?'#f59e0b':'#22c55e';}
 function semTxt(p){return p>=100?'CRÍTICO':p>=80?'ALERTA':'NORMAL';}
 function getSectorKey(ct){const s=getSectorForCT(ct);return s?s.key:null;}
 
@@ -573,15 +573,19 @@ function renderSector(sector){
 
 function buildCTRows(entries,tbody,maxLoad,ctColor,sectorClass){
   entries.forEach(([ct,load])=>{
-    const s=defS(ct);const cap=capMin(ct);const pct=cap>0?Math.round(load/cap*100):0;
+    const s=defS(ct);const cap=capMin(ct);
+    const pct=cap>0?Math.round(load/cap*100):0;
     const col=semC(pct);const bw=Math.min(Math.round(load/maxLoad*100),100);
     const name=CT_NAMES[ct]||'';
-    const ctSecDef=getSectorForCT(ct);
-    const ctRowColor=ctSecDef?ctSecDef.color:(sectorDef?sectorDef.color:'var(--accent3)');
+    // Get color from sector definition if available
+    const ctSec=getSectorForCT(ct);
+    const rowColor=ctSec?ctSec.color:ctColor;
     const tr=document.createElement('tr');tr.className='ct-main-tr';
     tr.innerHTML=`
-      <td><div class="ct-name" style="color:${ctColor}">${ct}</div><div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-top:1px">${name}</div></td>
-      <td class="ct-load-val">${fmtH(load)}</td><td class="ct-cap-val">${fmtH(cap)}</td>
+      <td><div class="ct-name" style="color:${rowColor}">${ct}</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-top:1px">${name}</div></td>
+      <td class="ct-load-val">${fmtH(load)}</td>
+      <td class="ct-cap-val">${fmtH(cap)}</td>
       <td style="padding:2px 4px"><input class="tci" type="number" min="1" max="3" value="${s.turnos}" data-ct="${ct}" data-f="turnos"></td>
       <td style="padding:2px 4px"><input class="tci" type="number" min="1" max="12" value="${s.hturno}" data-ct="${ct}" data-f="hturno"></td>
       <td style="padding:2px 4px"><input class="tci" type="number" min="1" max="31" value="${s.dias}" data-ct="${ct}" data-f="dias"></td>
@@ -620,25 +624,27 @@ function renderFabSectorCards(){
     const pct=cap>0?Math.min(Math.round(load/cap*100),200):0;
     const col=semC(pct);const r=46,circ=Math.PI*r,fill=Math.min(pct/100,1)*circ;
     const card=document.createElement('div');
-    card.style.cssText=`background:var(--s1);border:1px solid var(--border2);overflow:hidden;cursor:pointer;transition:all .2s;position:relative;`;
-    card.innerHTML=`<div style="height:4px;background:${sector.color};border-radius:2px 2px 0 0"></div>
-      <div style="padding:14px 16px 10px"><div style="font-size:16px;font-weight:800;color:${sector.color};margin-bottom:2px">${sector.label}</div>
-      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3)">${sector.key}-xxx</div></div>
+    card.style.cssText=`background:var(--s2);border:1px solid var(--border);overflow:hidden;cursor:pointer;transition:background .15s;`;
+    card.innerHTML=`<div style="height:2px;background:var(--accent2)"></div>
+      <div style="padding:14px 16px 10px">
+        <div style="font-size:13px;font-weight:700;color:var(--text);letter-spacing:.12em;text-transform:uppercase;font-family:'JetBrains Mono',monospace;margin-bottom:3px">${sector.label}</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);letter-spacing:.06em">${sector.key}-xxx</div>
+      </div>
       <div style="display:flex;justify-content:center;padding:4px 0">
         <div style="position:relative;width:110px;height:60px;overflow:hidden">
           <svg width="110" height="60" viewBox="0 0 110 60">
             <path d="M9 53 A46 46 0 0 1 101 53" fill="none" stroke="var(--s4)" stroke-width="9" stroke-linecap="round"/>
             <path d="M9 53 A46 46 0 0 1 101 53" fill="none" stroke="${col}" stroke-width="9" stroke-linecap="round" stroke-dasharray="${fill} ${circ}" />
           </svg>
-          <div style="position:absolute;bottom:0;left:0;right:0;text-align:center;font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:${col}">${pct}%</div>
+          <div style="position:absolute;bottom:0;left:0;right:0;text-align:center;font-family:'JetBrains Mono',monospace;font-size:17px;font-weight:800;color:${col};letter-spacing:.02em">${pct}%</div>
         </div>
       </div>
-      <div style="padding:6px 16px 14px;display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:10px;">
-        <span style="color:var(--text3)">Carga: <b style="color:var(--accent3)">${fmtH(load)}</b></span>
-        <span style="color:var(--text3)">Cap: <b style="color:var(--text2)">${fmtH(cap)}</b></span>
+      <div style="padding:4px 14px 12px;display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.04em;">
+        <span style="color:var(--text3)">CARGA <span style="color:var(--text2);font-weight:700">${fmtH(load)}</span></span>
+        <span style="color:var(--text3)">CAP <span style="color:var(--text3)">${fmtH(cap)}</span></span>
       </div>`;
-    card.addEventListener('mouseenter',()=>card.style.transform='translateY(-2px)');
-    card.addEventListener('mouseleave',()=>card.style.transform='');
+    card.addEventListener('mouseenter',()=>card.style.background='var(--s3)');
+    card.addEventListener('mouseleave',()=>card.style.background='var(--s2)');
     card.addEventListener('click',()=>{activeFabSector=sector.key;renderFabSectorDetail(sector.key);});
     grid.appendChild(card);
   });
@@ -655,7 +661,7 @@ function renderFabSectorDetail(sectorKey,filterStatus='ALL',searchTerm=''){
   const backBar=document.createElement('div');
   backBar.style.cssText='padding:8px 16px;border-bottom:1px solid var(--border);background:var(--s2);display:flex;align-items:center;gap:12px;flex-shrink:0;flex-wrap:wrap;';
   backBar.innerHTML=`<button id="backToSectors" style="padding:4px 12px;border-radius:3px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-family:'JetBrains Mono',monospace;font-size:11px;cursor:pointer;">← Setores</button>
-    <span style="font-size:15px;font-weight:800;color:${sector.color}">${sector.label}</span>
+    <span style="font-size:12px;font-weight:700;color:var(--accent3);font-family:'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase">${sector.label}</span>
     <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3)">${sectorKey}-xxx</span>
     <div style="margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
       <div style="display:flex;align-items:center;gap:5px;background:var(--bg);border:1px solid var(--border2);border-radius:4px;padding:4px 8px;">
