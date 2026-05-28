@@ -432,26 +432,71 @@ function renderPills(ctMap){
 }
 
 // ── CALCULATE ─────────────────────────────────────────────────────────
+// BOM tree cache (client-side)
+const BOM_CACHE={};
+
+async function getBOMTree(mat){
+  if(BOM_CACHE[mat])return BOM_CACHE[mat];
+  const tree=await api('/api/bom/tree/'+mat);
+  BOM_CACHE[mat]=tree;
+  return tree;
+}
+
+function explodeTree(node, qtyPA, compMap){
+  // Direct qty (no cascade) -- each component uses its own qty in direct parent
+  if(!node||!node.children)return;
+  for(const child of node.children){
+    const cq=parseFloat(child.qty)||1;
+    if(cq<1)continue; // skip scrap factors
+    const directQty=qtyPA*cq;
+    const mat=child.mat;
+    // Check if this material has roteiro ops
+    // We use CTI (already loaded) to find CT operations
+    for(const[ct,ops]of Object.entries(CTI)){
+      const op=ops.find(o=>o.mat===mat);
+      if(!op)continue;
+      const indirUnit=op.indir/(op.qty_base||1);
+      const mins=directQty*indirUnit;
+      if(!compMap[ct])compMap[ct]=[];
+      let entry=compMap[ct].find(e=>e.mat===mat);
+      if(!entry){
+        entry={mat,desc:child.desc||'',tipo:child.tipo||'',
+               accQ:directQty,qtyTotal:directQty,indirUnit,mins};
+        compMap[ct].push(entry);
+      } else {
+        entry.qtyTotal+=directQty;
+        entry.mins+=mins;
+      }
+    }
+    // Recurse with same qtyPA (direct, not cascaded)
+    explodeTree(child, qtyPA, compMap);
+  }
+}
+
 async function calcPA(num){
   const btn=document.querySelector(`.cb[data-num="${num}"]`);
-  if(btn)btn.textContent='...';
+  if(btn){btn.textContent='...';btn.classList.remove('done');}
   const{pa,qty}=queued[num];
   try{
-    const result=await fetch(API+'/api/calc/explode',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({items:[{pa:pa.mat,qty}]})
-    }).then(r=>r.json());
-    queued[num].ctMap=result;
-    // Build compMap from result
-    const compMap={};
-    for(const[ct,data]of Object.entries(result)){
-      if(!data||!data.components)continue;
-      compMap[ct]=data.components.map(c=>({
-        mat:c.mat,desc:c.desc||'',tipo:'',accQ:c.qty_total||0,
-        qtyTotal:c.qty_total||0,indirUnit:c.indir_unit||0,mins:c.mins||0
-      }));
+    // Load BOM tree (cached after first load)
+    const tree=await getBOMTree(pa.mat);
+    if(!tree||!tree.children){
+      queued[num].ctMap={};queued[num].compMap={};
+      renderProgGrid();return;
     }
+    // Explode client-side
+    const compMap={};
+    explodeTree(tree, qty, compMap);
+    // Build ctMap from compMap
+    const ctMap={};
+    for(const[ct,comps]of Object.entries(compMap)){
+      const load=comps.reduce((s,c)=>s+c.mins,0);
+      ctMap[ct]={load_min:load,components:comps.map(c=>({
+        mat:c.mat,desc:c.desc,qty_total:Math.round(c.qtyTotal),
+        indir_unit:c.indirUnit,mins:c.mins
+      }))};
+    }
+    queued[num].ctMap=ctMap;
     queued[num].compMap=compMap;
   }catch(e){console.error('calcPA error:',e);}
   renderProgGrid();
@@ -460,20 +505,8 @@ async function calcPA(num){
 async function calcAll(){
   const keys=Object.keys(queued);
   if(!keys.length)return;
-  // Batch call
-  const items=keys.map(num=>({pa:queued[num].pa.mat,qty:queued[num].qty}));
-  try{
-    const result=await fetch(API+'/api/calc/explode',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({items})
-    }).then(r=>r.json());
-    // Result is aggregated -- split back per PA
-    // For now: run individually (can optimize later)
-    await Promise.all(keys.map(num=>calcPA(num)));
-  }catch(e){
-    await Promise.all(keys.map(num=>calcPA(num)));
-  }
+  // Calculate all PAs client-side in parallel
+  await Promise.all(keys.map(num=>calcPA(num)));
   renderProgGrid();
 }
 
@@ -481,16 +514,18 @@ function getGlobalMaps(){
   const ctMap={},compMap={};
   for(const{ctMap:cm,compMap:pm}of Object.values(queued)){
     if(!cm)continue;
+    // ctMap values are {load_min, components}
     for(const[ct,data]of Object.entries(cm)){
-      const load=typeof data==='object'?data.load_min:data;
-      ctMap[ct]=(ctMap[ct]||0)+(load||0);
+      const load=typeof data==='object'&&data.load_min!=null?data.load_min:parseFloat(data)||0;
+      ctMap[ct]=(ctMap[ct]||0)+load;
     }
     for(const[ct,items]of Object.entries(pm||{})){
       if(!compMap[ct])compMap[ct]=[];
       for(const item of items){
         let e=compMap[ct].find(x=>x.mat===item.mat);
         if(!e){e={...item,mins:0,qtyTotal:0};compMap[ct].push(e);}
-        e.mins+=item.mins;e.qtyTotal+=item.qtyTotal;
+        e.mins+=item.mins||0;
+        e.qtyTotal+=(item.qtyTotal||item.accQ||0);
       }
     }
   }
