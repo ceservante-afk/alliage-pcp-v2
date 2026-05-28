@@ -360,11 +360,11 @@ async function init(){
 
   // Load CT names, PA→Linha, CTI from API
   try{
-    const ctNamesData=await api('/api/roteiro/ct_names');
+    const ctNamesData=await fetch('/static/ct_names.json').then(r=>r.json());
     CT_NAMES=ctNamesData;
-    const paLinhaData=await api('/api/bom/pa_linha');
+    const paLinhaData=await fetch('/static/pa_linha.json').then(r=>r.json());
     PA_LINHA=paLinhaData;
-    const ctiData=await api('/api/roteiro/cti');
+    const ctiData=await fetch('/static/cti.json').then(r=>r.json());
     CTI=ctiData;
     document.getElementById('rCTCount').textContent=Object.keys(CTI).length;
   }catch(e){console.warn('Static data load error:',e);}
