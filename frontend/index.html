@@ -79,14 +79,17 @@ body{background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;di
 .prog-empty-icon{font-size:28px;opacity:.2;}
 
 /* PROG ROWS */
-.pc{display:grid;grid-template-columns:1fr 70px 100px 32px;align-items:center;border-bottom:1px solid var(--border);padding:10px 16px;gap:12px;transition:background .1s;flex-wrap:wrap;}
+.pc{display:grid;grid-template-columns:1fr 70px 32px 32px;align-items:center;border-bottom:1px solid var(--border);padding:10px 16px;gap:12px;transition:background .1s;}
 .pc:hover{background:rgba(37,99,168,.03);}
 .pc-num{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);margin-bottom:2px;}
 .pc-desc{font-size:13px;font-weight:600;}
 .qty-inp{width:100%;background:var(--s1);border:1px solid var(--border2);padding:5px 8px;font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:var(--accent3);outline:none;text-align:center;}
 .qty-inp:focus{border-color:var(--accent2);}
-.cb{width:100%;padding:6px 0;background:rgba(37,99,168,.15);border:1px solid var(--accent);color:var(--accent3);font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;cursor:pointer;letter-spacing:.06em;}
-.cb.done{background:rgba(22,163,74,.15);border-color:var(--green);color:var(--green);}
+.cb{width:32px;height:32px;background:transparent;border:1px solid var(--border2);color:var(--text3);font-family:'JetBrains Mono',monospace;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;}
+.cb:hover{border-color:var(--accent2);color:var(--accent3);}
+.cb.done{background:rgba(22,163,74,.1);border-color:var(--green);color:var(--green);}
+.cb.done:hover{background:rgba(22,163,74,.2);}
+.cb.calc-spin{border-color:var(--accent2);color:var(--accent2);animation:spin .8s linear infinite;}
 .db{background:transparent;border:1px solid var(--border);color:var(--text3);cursor:pointer;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:12px;transition:all .15s;}
 .db:hover{border-color:var(--red);color:var(--red);}
 
@@ -416,28 +419,11 @@ function renderProgGrid(){
     const{pa,qty,ctMap}=queued[num];
     const card=document.createElement('div');
     card.className='pc';
-    // Build CT pills if calculated
-    let pillsHtml='';
-    if(ctMap){
-      const topCTs=Object.entries(ctMap)
-        .map(([ct,d])=>({ct,load:typeof d==='object'?d.load_min:d}))
-        .sort((a,b)=>b.load-a.load).slice(0,8);
-      if(topCTs.length){
-        pillsHtml=`<div style="grid-column:1/-1;display:flex;flex-wrap:wrap;gap:4px;padding-top:7px;border-top:1px solid var(--border);margin-top:2px;">
-          ${topCTs.map(({ct,load})=>`<div style="display:flex;align-items:center;gap:5px;background:var(--s3);border:1px solid var(--border);padding:2px 7px;font-family:'JetBrains Mono',monospace;font-size:9px;">
-            <span style="color:var(--accent3)">${ct}</span>
-            <span style="color:var(--text3)">${CT_NAMES[ct]?CT_NAMES[ct].split(' ').slice(0,2).join(' '):''}</span>
-            <span style="color:var(--text2);font-weight:700">${fmtH(load)}</span>
-          </div>`).join('')}
-        </div>`;
-      }
-    }
     card.innerHTML=`
       <div><div class="pc-num">${pa.mat}</div><div class="pc-desc" title="${pa.desc}">${pa.desc}</div></div>
       <input class="qty-inp" type="number" min="1" value="${qty}" data-num="${num}">
-      <button class="cb${ctMap?' done':''}" data-num="${num}">${ctMap?'✓ CALC':'CALC'}</button>
-      <button class="db" data-num="${num}">✕</button>
-      ${pillsHtml}`;
+      <button class="cb${ctMap?' done':''}" data-num="${num}" title="${ctMap?'Calculado — clique para recalcular':'Clique para calcular'}">${ctMap?'✓':''}</button>
+      <button class="db" data-num="${num}">✕</button>`;
     wrap.appendChild(card);
   });
   wrap.querySelectorAll('.qty-inp').forEach(i=>i.addEventListener('change',e=>{
@@ -500,7 +486,7 @@ function explodeTree(node, qtyPA, compMap){
 
 async function calcPA(num){
   const btn=document.querySelector(`.cb[data-num="${num}"]`);
-  if(btn){btn.textContent='...';btn.classList.remove('done');}
+  if(btn){btn.textContent='◎';btn.classList.remove('done');btn.classList.add('calc-spin');}
   const{pa,qty}=queued[num];
   try{
     // Load BOM tree (cached after first load)
@@ -524,14 +510,24 @@ async function calcPA(num){
     queued[num].ctMap=ctMap;
     queued[num].compMap=compMap;
   }catch(e){console.error('calcPA error:',e);}
+  if(btn){btn.classList.remove('calc-spin');}
   renderProgGrid();
 }
 
 async function calcAll(){
   const keys=Object.keys(queued);
   if(!keys.length)return;
-  // Calculate all PAs client-side in parallel
-  await Promise.all(keys.map(num=>calcPA(num)));
+  const total=keys.length;
+  let done=0;
+  const ps=document.getElementById('progSummary');
+  // Calculate sequentially to show progress
+  for(const num of keys){
+    if(ps)ps.textContent=`Calculando...  ${done}/${total}`;
+    await calcPA(num);
+    done++;
+    if(ps)ps.textContent=`Calculando...  ${done}/${total}`;
+  }
+  updateProgCounter();
   renderProgGrid();
 }
 
