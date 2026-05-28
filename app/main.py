@@ -2,9 +2,20 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 import os
 
-app = FastAPI(title="Alliage PCP", version="2.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Warm up cache on startup
+    try:
+        from app.cache import preload_all
+        preload_all()
+    except Exception as e:
+        print(f"Cache preload error: {e}")
+    yield
+
+app = FastAPI(title="Alliage PCP", version="2.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -28,6 +39,11 @@ if os.path.exists(static_dir):
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+@app.get("/ping")
+async def ping():
+    """Keep-alive endpoint."""
+    return "pong"
 
 @app.get("/")
 async def root():
