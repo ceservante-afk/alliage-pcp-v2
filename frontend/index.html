@@ -94,7 +94,7 @@ body{background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;di
 .db:hover{border-color:var(--red);color:var(--red);}
 
 /* CONSOLIDADO */
-.consol-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;height:100%;}
+.consol-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;}
 .consol-topbar{padding:10px 20px;border-bottom:1px solid var(--border);background:var(--s1);display:flex;align-items:center;gap:14px;flex-shrink:0;}
 .consol-title{font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;font-family:'JetBrains Mono',monospace;color:var(--text2);}
 .consol-sub{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);}
@@ -104,7 +104,8 @@ body{background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;di
 .stab{padding:6px 14px;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;font-family:'JetBrains Mono',monospace;}
 .stab.active.fab{color:var(--accent3);border-bottom-color:var(--accent2);}
 .stab.active.mont{color:#7a9ab2;border-bottom-color:#4a6a82;}
-.sector-body{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;height:100%;}
+.sector-body{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;}
+.consol-bottom{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;}
 
 /* CT TABLE */
 table.ctt{width:100%;border-collapse:collapse;}
@@ -171,6 +172,20 @@ table.ctt th{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--te
 .prog-wrap::-webkit-scrollbar{width:3px;}
 
 @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+
+#linhaCards{
+  height:50%;
+  flex-shrink:0;
+  overflow-y:auto;
+  overflow-x:hidden;
+  flex-wrap:wrap!important;
+  align-content:flex-start;
+  display:flex;
+  gap:0;
+}
+#linhaCards::-webkit-scrollbar{width:3px;}
+#linhaCards::-webkit-scrollbar-thumb{background:var(--border2);}
+.consol-bottom{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;}
 </style>
 </head>
 <body>
@@ -235,11 +250,13 @@ table.ctt th{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--te
       <div class="consol-sub" id="consolSub">—</div>
       <button class="recalc" id="recalcBtn">↺ Recalcular</button>
     </div>
-    <div class="sector-tabs">
-      <div class="stab active fab" data-sc="fab">Fabricação</div>
-      <div class="stab mont" data-sc="mont">Montagem</div>
+    <div class="consol-bottom">
+      <div class="sector-tabs">
+        <div class="stab active fab" data-sc="fab">Fabricação</div>
+        <div class="stab mont" data-sc="mont">Montagem</div>
+      </div>
+      <div class="sector-body" id="sectorBody"></div>
     </div>
-    <div class="sector-body" id="sectorBody"></div>
   </div>
 </div>
 
@@ -526,16 +543,11 @@ async function calcPA(num){
 async function calcAll(){
   const keys=Object.keys(queued);
   if(!keys.length)return;
-  const total=keys.length;
-  let done=0;
   const ps=document.getElementById('progSummary');
-  if(ps)ps.textContent=`Calculando...  0/${total}`;
-  // Process one at a time to avoid overloading free tier DB
+  if(ps)ps.textContent='Calculando...';
   for(const num of keys){
     await calcPA(num);
-    done++;
-    if(ps)ps.textContent=`Calculando...  ${done}/${total}`;
-    renderProgGrid(); // update checkmarks as we go
+    renderProgGrid();
   }
   updateProgCounter();
   renderProgGrid();
@@ -826,7 +838,7 @@ function renderLinhaCards(){
   let container=document.getElementById('linhaCards');
   if(!container){
     container=document.createElement('div');container.id='linhaCards';
-    container.style.cssText='display:flex;gap:8px;padding:8px 14px;flex-wrap:nowrap;flex-shrink:0;border-bottom:1px solid var(--border);background:var(--s1);overflow-x:auto;max-height:130px;';
+    container.style.cssText='display:grid;grid-template-columns:repeat(12,1fr);gap:0;border-bottom:1px solid var(--border);background:var(--s1);overflow-y:auto;overflow-x:hidden;';
     const st=document.querySelector('.sector-tabs');if(st)st.parentNode.insertBefore(container,st);
   }
   if(!entries.length){container.style.display='none';return;}
@@ -840,8 +852,8 @@ function renderLinhaCards(){
 
   container.innerHTML=entries.map(([linha,d])=>`
     <div style="background:var(--s2);border:1px solid var(--border);padding:8px 10px;min-width:155px;flex-shrink:0;border-top:2px solid var(--accent2);">
-      <div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--text3);text-transform:uppercase;letter-spacing:.12em;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:170px" title="${linha}">${linha}</div>
-      <div style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:800;color:var(--text);line-height:1">${Math.round(d.qty)}</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:7px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${linha}">${linha}</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:800;color:var(--text);line-height:1">${Math.round(d.qty)}</div>
       <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-bottom:8px">peças · ${d.pas} PA</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;">
         <div>
@@ -849,14 +861,14 @@ function renderLinhaCards(){
             <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text3)"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
             <span style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Fabricação</span>
           </div>
-          <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);font-weight:700">${fmt(d.fabMins)}</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text2);font-weight:700">${fmt(d.fabMins)}</div>
         </div>
         <div>
           <div style="display:flex;align-items:center;gap:3px;margin-bottom:2px">
             <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text3)"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
             <span style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Montagem</span>
           </div>
-          <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);font-weight:700">${fmt(d.montMins)}</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text2);font-weight:700">${fmt(d.montMins)}</div>
         </div>
       </div>
       <div style="height:2px;background:var(--border2)">
