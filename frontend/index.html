@@ -178,14 +178,21 @@ table.ctt th{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--te
   flex-shrink:0;
   overflow-y:auto;
   overflow-x:hidden;
-  flex-wrap:wrap!important;
-  align-content:flex-start;
-  display:flex;
+  display:grid;
+  grid-template-columns:repeat(10,1fr);
   gap:0;
+  align-content:start;
 }
 #linhaCards::-webkit-scrollbar{width:3px;}
 #linhaCards::-webkit-scrollbar-thumb{background:var(--border2);}
 .consol-bottom{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;}
+
+.hz-selector{display:flex;gap:2px;margin-left:16px;}
+.hz-btn{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;
+  padding:3px 8px;border:1px solid var(--border2);background:transparent;
+  color:var(--text3);cursor:pointer;letter-spacing:.08em;transition:all .15s;}
+.hz-btn:hover{border-color:var(--accent2);color:var(--accent3);}
+.hz-btn.active{background:rgba(37,99,168,.2);border-color:var(--accent2);color:var(--accent3);}
 </style>
 </head>
 <body>
@@ -193,6 +200,14 @@ table.ctt th{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--te
 
 <div class="topbar">
   <div class="logo">PAINEL DE CONTROLE DE CAPACIDADE</div>
+  <div class="hz-selector">
+    <button class="hz-btn active" data-h="week">SEMANAL</button>
+    <button class="hz-btn" data-h="fortnight">QUINZENAL</button>
+    <button class="hz-btn" data-h="month">MENSAL</button>
+    <button class="hz-btn" data-h="full">COMPLETO</button>
+  </div>
+  <span id="horizonDays" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3)">5d úteis</span>
+  <span id="progPeriodInfo" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3)"></span>
   <div class="tbar-stats">
     <div class="tstat"><span class="sysdot"></span>ONLINE</div>
     <div class="tstat">PAs: <b id="sPAs">—</b></div>
@@ -205,6 +220,7 @@ table.ctt th{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--te
   <div class="tab active" data-s="Prog">Programação</div>
   <div class="tab" data-s="Consol">Consolidado CTs</div>
   <div class="tab" data-s="Roteiros">Roteiros por CT</div>
+  <div class="tab" data-s="Params">Parâmetros</div>
 </div>
 
 <!-- PROGRAMAÇÃO -->
@@ -351,13 +367,85 @@ async function api(path){
 // ── STATE ─────────────────────────────────────────────────────────────
 let ALL_PAS=[], CT_NAMES={}, PA_LINHA={}, CTI={};
 let filtered=[], filterT='ALL', srchQ='';
-let queued={};      // num -> {pa, qty, ctMap, compMap}
+let queued={};      // num -> {pa, qty, ctMap, compMap, date}
 let ctSets={};
 let globalCTMap={}, globalCompMap={};
 let activeSector='fab', activeFabSector=null, selectedCT=null;
 let rActiveCT=null, rSortCol='indir', rSortAsc=false, rSectorFilter='ALL';
 
-function defS(ct){return{turnos:ctSets[ct]?.turnos??1,hturno:ctSets[ct]?.hturno??8,dias:ctSets[ct]?.dias??5,efic:ctSets[ct]?.efic??85};}
+// ── HORIZON STATE ─────────────────────────────────────────────────────
+let PROG_DATA=[];   // full imported program: [{mat, qty, date, pa}]
+let HORIZON='week'; // week|fortnight|month|full
+let HORIZON_DAYS={week:5,fortnight:10,month:22,full:0}; // 0=auto
+let HORIZON_LABELS={week:'SEMANAL',fortnight:'QUINZENAL',month:'MENSAL',full:'PERÍODO COMPLETO'};
+let PROG_DATE_MIN=null, PROG_DATE_MAX=null;
+
+function businessDaysBetween(d1,d2){
+  let count=0,cur=new Date(d1);
+  while(cur<=d2){const d=cur.getDay();if(d>0&&d<6)count++;cur.setDate(cur.getDate()+1);}
+  return count;
+}
+
+function getHorizonEnd(){
+  if(!PROG_DATE_MIN)return null;
+  const start=new Date(PROG_DATE_MIN);
+  if(HORIZON==='full')return new Date(PROG_DATE_MAX);
+  const days=HORIZON_DAYS[HORIZON];
+  let count=0,cur=new Date(start);
+  while(count<days){cur.setDate(cur.getDate()+1);const d=cur.getDay();if(d>0&&d<6)count++;}
+  return cur;
+}
+
+function getHorizonDays(){
+  if(HORIZON==='full'){
+    if(!PROG_DATE_MIN||!PROG_DATE_MAX)return 5;
+    return businessDaysBetween(PROG_DATE_MIN,PROG_DATE_MAX)||1;
+  }
+  return HORIZON_DAYS[HORIZON];
+}
+
+function applyHorizon(){
+  // Filter PROG_DATA by horizon end date, aggregate by mat
+  const end=getHorizonEnd();
+  const agg={};
+  for(const item of PROG_DATA){
+    if(end&&item.date>end)continue;
+    if(!agg[item.mat])agg[item.mat]={pa:item.pa,qty:0,dates:[]};
+    agg[item.mat].qty+=item.qty;
+    agg[item.mat].dates.push(item.date);
+  }
+  // Update queued — preserve ctMaps if qty unchanged
+  const newQueued={};
+  for(const[mat,data]of Object.entries(agg)){
+    if(!data.pa)continue;
+    const prev=queued[mat];
+    const sameQty=prev&&prev.qty===data.qty;
+    newQueued[mat]={pa:data.pa,qty:data.qty,
+      ctMap:sameQty?prev.ctMap:null,
+      compMap:sameQty?prev.compMap:null,
+      date:data.dates[0]};
+  }
+  queued=newQueued;
+  // Update CT capacity days from horizon
+  const hDays=getHorizonDays();
+  for(const ct of Object.keys(ctSets)){
+    if(ctSets[ct]._horizonLocked)continue;
+    ctSets[ct].dias=hDays;
+  }
+  updateProgCounter();renderProgGrid();renderPAList();
+  // Update horizon button UI
+  document.querySelectorAll('.hz-btn').forEach(b=>b.classList.toggle('active',b.dataset.h===HORIZON));
+  // Update days display
+  const hdEl=document.getElementById('horizonDays');
+  if(hdEl)hdEl.textContent=getHorizonDays()+'d úteis';
+}
+
+function setHorizon(h){
+  HORIZON=h;
+  applyHorizon();
+}
+
+function defS(ct){return{turnos:ctSets[ct]?.turnos??1,hturno:ctSets[ct]?.hturno??8,dias:ctSets[ct]?.dias??getHorizonDays(),efic:ctSets[ct]?.efic??85};}
 function capMin(ct){const s=defS(ct);return s.turnos*s.hturno*s.dias*(s.efic/100)*60;}
 function saveCtSets(){try{localStorage.setItem('pcp_cts_v2',JSON.stringify(ctSets));}catch(e){}}
 
@@ -834,48 +922,44 @@ function renderLinhaCards(){
       else linhaData[linha].montMins+=load;
     }
   }
-  const entries=Object.entries(linhaData).sort((a,b)=>(b[1].fabMins+b[1].montMins)-(a[1].fabMins+a[1].montMins));
+  // Sort alphabetically
+  const entries=Object.entries(linhaData).sort((a,b)=>a[0].localeCompare(b[0]));
+  const maxLoad=Math.max(...entries.map(([,d])=>d.fabMins+d.montMins),1);
+
   let container=document.getElementById('linhaCards');
   if(!container){
     container=document.createElement('div');container.id='linhaCards';
-    container.style.cssText='display:grid;grid-template-columns:repeat(12,1fr);gap:0;border-bottom:1px solid var(--border);background:var(--s1);overflow-y:auto;overflow-x:hidden;';
-    const st=document.querySelector('.sector-tabs');if(st)st.parentNode.insertBefore(container,st);
+    const st=document.querySelector('.sector-tabs')||document.querySelector('.consol-bottom');
+    if(st)st.parentNode.insertBefore(container,st);
   }
   if(!entries.length){container.style.display='none';return;}
-  container.style.display='flex';
+  container.style.display='grid';
 
   function fmt(m){
-    if(!m)return'0h 00m';
+    if(!m||m<1)return'—';
     const h=Math.floor(m/60),mm=Math.round(m%60);
-    return h+'h '+String(mm).padStart(2,'0')+'m';
+    return h>0?h+'h '+String(mm).padStart(2,'0')+'m':mm+'m';
   }
 
   container.innerHTML=entries.map(([linha,d])=>`
-    <div style="background:var(--s2);border:1px solid var(--border);padding:8px 10px;min-width:155px;flex-shrink:0;border-top:2px solid var(--accent2);">
-      <div style="font-family:'JetBrains Mono',monospace;font-size:7px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${linha}">${linha}</div>
+    <div style="background:var(--s2);border:1px solid var(--border);padding:7px 10px;border-top:2px solid var(--accent2);overflow:hidden;min-width:0;">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:7px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${linha}">${linha}</div>
       <div style="font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:800;color:var(--text);line-height:1">${Math.round(d.qty)}</div>
-      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-bottom:8px">peças · ${d.pas} PA</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--text3);margin-bottom:6px">pc · ${d.pas} PA</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:6px;">
         <div>
-          <div style="display:flex;align-items:center;gap:3px;margin-bottom:2px">
-            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text3)"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            <span style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Fabricação</span>
-          </div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:7px;color:var(--text3);text-transform:uppercase;margin-bottom:1px">FAB</div>
           <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text2);font-weight:700">${fmt(d.fabMins)}</div>
         </div>
         <div>
-          <div style="display:flex;align-items:center;gap:3px;margin-bottom:2px">
-            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text3)"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
-            <span style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Montagem</span>
-          </div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:7px;color:var(--text3);text-transform:uppercase;margin-bottom:1px">MONT</div>
           <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text2);font-weight:700">${fmt(d.montMins)}</div>
         </div>
       </div>
-      <div style="height:2px;background:var(--border2)">
-        <div style="height:100%;width:${Math.min(100,Math.round((d.fabMins+d.montMins)/Math.max(...Object.values(linhaData).map(x=>x.fabMins+x.montMins))*100))}%;background:var(--accent2)"></div>
-      </div>
+      <div style="height:2px;background:var(--border2)"><div style="height:100%;width:${Math.round((d.fabMins+d.montMins)/maxLoad*100)}%;background:var(--accent2)"></div></div>
     </div>`).join('');
 }
+
 
 // ── ROTEIROS POR CT ───────────────────────────────────────────────────
 function renderRCTList(){
@@ -968,21 +1052,66 @@ document.getElementById('xlsIn').addEventListener('change',function(e){
   const file=e.target.files[0];if(!file)return;
   const reader=new FileReader();
   reader.onload=function(ev){
-    const wb=XLSX.read(ev.target.result,{type:'array'});
+    const wb=XLSX.read(ev.target.result,{type:'array',cellDates:true});
     const ws=wb.Sheets[wb.SheetNames[0]];
-    const rows=XLSX.utils.sheet_to_json(ws,{header:1});
+    const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:false,dateNF:'yyyy-mm-dd'});
+    const rawRows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true});
+    if(rows.length<2){alert('Arquivo vazio.');return;}
     const hdr=rows[0].map(h=>String(h||'').toUpperCase());
-    const pi=hdr.findIndex(h=>h.includes('PA')||h.includes('MATERIAL')||h.includes('COD'));
-    const qi=hdr.findIndex(h=>h.includes('QTD')||h.includes('QUANT')||h.includes('QTY'));
-    if(pi<0){alert('Coluna PA não encontrada.');return;}
-    rows.slice(1).forEach(row=>{
-      const num=String(row[pi]||'').trim();const qty=Math.round(parseFloat(row[qi])||1);
-      const pa=ALL_PAS.find(p=>p.mat===num);
+
+    // Detect columns
+    const dateI=hdr.findIndex(h=>h.includes('DATA')||h.includes('DATE'));
+    const matI=hdr.findIndex(h=>h.includes('COD')||h.includes('MATERIAL')||h.includes('PA'));
+    const qtyI=hdr.findIndex(h=>h.includes('FALTA')||h.includes('QTD')||h.includes('QUANT')||h.includes('QTY'));
+    const descI=hdr.findIndex(h=>h.includes('DESC'));
+    if(matI<0){alert('Coluna de material não encontrada.');return;}
+
+    // Parse rows
+    const newItems=[];
+    rows.slice(1).forEach((row,i)=>{
+      const matRaw=rawRows[i+1]?.[matI];
+      const mat=String(matRaw||'').trim();
+      if(!mat||mat==='undefined')return;
+      const qty=Math.round(parseFloat(String(rawRows[i+1]?.[qtyI]||'0').replace(',','.'))||0);
+      if(qty<=0)return;
+      const pa=ALL_PAS.find(p=>p.mat===mat);
       if(!pa)return;
-      if(queued[num]){queued[num].qty+=qty;queued[num].ctMap=null;queued[num].compMap=null;}
-      else{queued[num]={pa,qty,ctMap:null,compMap:null};}
+      // Parse date
+      let date=null;
+      if(dateI>=0){
+        const dRaw=rawRows[i+1]?.[dateI];
+        if(dRaw instanceof Date)date=dRaw;
+        else if(typeof dRaw==='number'){
+          // Excel serial date
+          const d=new Date((dRaw-25569)*86400*1000);
+          date=new Date(d.getFullYear(),d.getMonth(),d.getDate());
+        } else if(typeof dRaw==='string'&&dRaw){
+          const p=dRaw.split(/[-\/]/);
+          if(p.length===3)date=new Date(p[0],p[1]-1,p[2]);
+        }
+      }
+      if(!date)date=new Date();
+      newItems.push({mat,qty,date,pa});
     });
-    updateProgCounter();renderProgGrid();renderPAList();
+
+    if(!newItems.length){alert('Nenhum PA reconhecido. Verifique as colunas.');return;}
+
+    // Add to PROG_DATA (replace existing)
+    PROG_DATA=newItems;
+    PROG_DATE_MIN=new Date(Math.min(...newItems.map(x=>x.date)));
+    PROG_DATE_MAX=new Date(Math.max(...newItems.map(x=>x.date)));
+
+    const hEnd=getHorizonEnd();
+    const totalDays=businessDaysBetween(PROG_DATE_MIN,PROG_DATE_MAX)||1;
+    const fmt=d=>d?d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit'}):'?';
+
+    // Show period info
+    const pi2=document.getElementById('progPeriodInfo');
+    if(pi2)pi2.textContent=`${fmt(PROG_DATE_MIN)} → ${fmt(PROG_DATE_MAX)} · ${totalDays}d úteis`;
+
+    // Set horizon to full if data spans more than a week
+    if(totalDays>5&&HORIZON==='week')setHorizon('full');
+    else applyHorizon();
   };
   reader.readAsArrayBuffer(file);e.target.value='';
 });
@@ -996,6 +1125,7 @@ function setupEvents(){
     document.getElementById('s'+s)?.classList.add('on');
     if(s==='Consol'){activeFabSector=null;renderConsol();}
     if(s==='Roteiros'){if(Object.keys(CTI).length)renderRCTList();else setTimeout(renderRCTList,500);}
+    if(s==='Params'){renderParamsTable();}
   }));
   document.getElementById('srch').addEventListener('input',e=>{srchQ=e.target.value;renderPAList();});
   document.querySelectorAll('.chip').forEach(c=>c.addEventListener('click',()=>{
@@ -1005,6 +1135,11 @@ function setupEvents(){
   document.getElementById('recalcBtn')?.addEventListener('click',()=>{calcAll().then(()=>{renderLinhaCards();renderConsol();});});
   document.getElementById('clearProg')?.addEventListener('click',()=>{queued={};updateProgCounter();renderProgGrid();renderPAList();});
   document.querySelectorAll('.stab').forEach(t=>t.addEventListener('click',()=>renderSector(t.dataset.sc)));
+  // Horizon buttons
+  document.querySelectorAll('.hz-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>setHorizon(btn.dataset.h));
+  });
+
   document.addEventListener('click',e=>{
     const btn=e.target.closest('[data-rs]');if(!btn)return;
     rSectorFilter=btn.dataset.rs;
@@ -1057,8 +1192,129 @@ function searchByComponent(code){
   tbl.appendChild(tbody);wrap.appendChild(tbl);
 }
 
+// ── PARÂMETROS ────────────────────────────────────────────────────────
+const SECTOR_PARAMS_DEF = [
+  {key:'LASER', label:'Corte Laser',     cts:['ESTA-024','ESTA-008']},
+  {key:'SOLDA', label:'Solda Elétrica',  cts:['ESTA-033','ESTA-009','ESTA-020','ESTA-028','ESTA-032']},
+  {key:'ESTA',  label:'Estamparia Geral',cts:null},
+  {key:'USIN',  label:'Usinagem',        cts:null},
+  {key:'MUSI',  label:'Micro Usinagem',  cts:null},
+  {key:'PINP',  label:'Pintura Pó',      cts:null},
+  {key:'GALV',  label:'Galvanoplastia',  cts:null},
+];
+
+function getSectorForCTParams(ct){
+  if(['ESTA-024','ESTA-008'].includes(ct))return'LASER';
+  if(['ESTA-033','ESTA-009','ESTA-020','ESTA-028','ESTA-032'].includes(ct))return'SOLDA';
+  const pfx=['ESTA','USIN','MUSI','PINP','GALV'];
+  for(const p of pfx)if(ct.startsWith(p))return p;
+  return null;
+}
+
+function renderParamsTable(){
+  const body=document.getElementById('paramsBody');if(!body)return;
+  const hDays=getHorizonDays();
+  // Group CTs by sector
+  const allCTs=Object.keys(CTI).filter(ct=>isFab(ct)).sort();
+  const bySector={};
+  for(const ct of allCTs){
+    const sk=getSectorCTParams(ct)||'OUTROS';
+    if(!bySector[sk])bySector[sk]=[];
+    bySector[sk].push(ct);
+  }
+  let html='';
+  for(const sec of SECTOR_PARAMS_DEF){
+    const cts=bySector[sec.key]||[];
+    if(!cts.length)continue;
+    html+=`<div style="margin-bottom:18px;">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;color:var(--accent3);letter-spacing:.14em;text-transform:uppercase;padding:6px 0;border-bottom:1px solid var(--border);margin-bottom:6px;">${sec.label}</div>
+      <table style="width:100%;border-collapse:collapse;">
+        <thead><tr>
+          <th style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;padding:4px 8px;text-align:left;border-bottom:1px solid var(--border);">CT</th>
+          <th style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;padding:4px 8px;text-align:left;border-bottom:1px solid var(--border);">Nome</th>
+          <th style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;padding:4px 8px;text-align:center;border-bottom:1px solid var(--border);width:70px">Turnos</th>
+          <th style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;padding:4px 8px;text-align:center;border-bottom:1px solid var(--border);width:80px">H/Turno</th>
+          <th style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;padding:4px 8px;text-align:center;border-bottom:1px solid var(--border);width:70px">Efic %</th>
+          <th style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;padding:4px 8px;text-align:center;border-bottom:1px solid var(--border);width:60px">HC</th>
+          <th style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;padding:4px 8px;text-align:center;border-bottom:1px solid var(--border);width:60px">Dias</th>
+          <th style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;padding:4px 8px;text-align:right;border-bottom:1px solid var(--border);width:80px">Cap (h)</th>
+        </tr></thead>
+        <tbody>
+          ${cts.map(ct=>{
+            const s=defS(ct);
+            const cap=(s.turnos*s.hturno*hDays*(s.efic/100)).toFixed(1);
+            const hc=ctSets[ct]?.hc||1;
+            return`<tr class="params-row" style="border-bottom:1px solid var(--border);">
+              <td style="padding:5px 8px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent3)">${ct}</td>
+              <td style="padding:5px 8px;font-size:10px;color:var(--text2)">${CT_NAMES[ct]||'—'}</td>
+              <td style="padding:3px 4px;text-align:center"><input class="tci" type="number" min="1" max="3" value="${s.turnos}" data-ct="${ct}" data-f="turnos" onchange="updateParamCT(this)"></td>
+              <td style="padding:3px 4px;text-align:center"><input class="tci" type="number" min="1" max="24" value="${s.hturno}" data-ct="${ct}" data-f="hturno" onchange="updateParamCT(this)"></td>
+              <td style="padding:3px 4px;text-align:center"><input class="tci" type="number" min="1" max="100" value="${s.efic}" data-ct="${ct}" data-f="efic" onchange="updateParamCT(this)"></td>
+              <td style="padding:3px 4px;text-align:center"><input class="tci" type="number" min="1" max="99" value="${hc}" data-ct="${ct}" data-f="hc" onchange="updateParamCT(this)"></td>
+              <td style="padding:5px 8px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3)">${hDays}</td>
+              <td style="padding:5px 8px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent3)">${cap}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  }
+  body.innerHTML=html;
+}
+
+function getSectorCTParams(ct){
+  if(['ESTA-024','ESTA-008'].includes(ct))return'LASER';
+  if(['ESTA-033','ESTA-009','ESTA-020','ESTA-028','ESTA-032'].includes(ct))return'SOLDA';
+  const pfx=['ESTA','USIN','MUSI','PINP','GALV'];
+  for(const p of pfx)if(ct.startsWith(p))return p;
+  return null;
+}
+
+function updateParamCT(inp){
+  const ct=inp.dataset.ct,f=inp.dataset.f;
+  if(!ctSets[ct])ctSets[ct]={...defS(ct)};
+  if(f==='hc')ctSets[ct].hc=parseFloat(inp.value)||1;
+  else ctSets[ct][f]=parseFloat(inp.value)||1;
+  // Recalc cap display on same row
+  const row=inp.closest('tr');
+  if(row){
+    const s=defS(ct);
+    const cap=(s.turnos*s.hturno*getHorizonDays()*(s.efic/100)).toFixed(1);
+    const capCell=row.querySelector('td:last-child');
+    if(capCell)capCell.textContent=cap;
+  }
+  saveCtSets();
+}
+
+function saveParams(){
+  saveCtSets();
+  const btn=event?.target;
+  if(btn){const orig=btn.textContent;btn.textContent='✓ Salvo!';setTimeout(()=>btn.textContent=orig,1500);}
+}
+
+function resetParams(){
+  if(!confirm('Resetar todos os parâmetros para padrão?'))return;
+  ctSets={};saveCtSets();renderParamsTable();
+}
+
+
 init();
 </script>
 
+
+<!-- ═══ TELA: PARÂMETROS ═══ -->
+<div class="screen" id="sParams">
+  <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;background:var(--bg);">
+    <div style="padding:10px 20px;border-bottom:1px solid var(--border);background:var(--s1);display:flex;align-items:center;gap:14px;flex-shrink:0;">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.12em;color:var(--text2)">PARÂMETROS — HC / EFICIÊNCIA / HORAS</div>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3)">Dias calculados pelo horizonte selecionado</span>
+      <button onclick="saveParams()" style="margin-left:auto;padding:4px 14px;border:1px solid var(--accent);background:rgba(37,99,168,.15);color:var(--accent3);font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;cursor:pointer;">✓ Salvar</button>
+      <button onclick="resetParams()" style="padding:4px 10px;border:1px solid var(--border2);background:transparent;color:var(--text3);font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer;">↺ Resetar</button>
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:14px 20px;">
+      <div id="paramsBody"></div>
+    </div>
+  </div>
+</div>
 </body>
 </html>
