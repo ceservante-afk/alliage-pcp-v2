@@ -399,7 +399,12 @@ function getHorizonEnd(){
 function getHorizonDays(){
   if(HORIZON==='full'){
     if(!PROG_DATE_MIN||!PROG_DATE_MAX)return 5;
-    return businessDaysBetween(PROG_DATE_MIN,PROG_DATE_MAX)||1;
+    return Math.max(1,businessDaysBetween(PROG_DATE_MIN,PROG_DATE_MAX));
+  }
+  // For fixed horizons, also cap at available period if data was imported
+  if(PROG_DATE_MIN&&PROG_DATE_MAX){
+    const avail=Math.max(1,businessDaysBetween(PROG_DATE_MIN,PROG_DATE_MAX));
+    return Math.min(HORIZON_DAYS[HORIZON],avail);
   }
   return HORIZON_DAYS[HORIZON];
 }
@@ -437,7 +442,14 @@ function applyHorizon(){
   document.querySelectorAll('.hz-btn').forEach(b=>b.classList.toggle('active',b.dataset.h===HORIZON));
   // Update days display
   const hdEl=document.getElementById('horizonDays');
-  if(hdEl)hdEl.textContent=getHorizonDays()+'d úteis';
+  if(hdEl){
+    if(HORIZON==='full'&&PROG_DATE_MIN&&PROG_DATE_MAX){
+      const fmt=d=>d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+      hdEl.textContent=fmt(PROG_DATE_MIN)+' → '+fmt(PROG_DATE_MAX);
+    } else {
+      hdEl.textContent=getHorizonDays()+'d úteis';
+    }
+  }
 }
 
 function setHorizon(h){
@@ -599,6 +611,7 @@ function explodeTree(node, qtyPA, compMap){
 }
 
 async function calcPA(num){
+  if(!queued[num])return;
   const btn=document.querySelector(`.cb[data-num="${num}"]`);
   if(btn){btn.textContent='◎';btn.classList.remove('done');btn.classList.add('calc-spin');}
   const{pa,qty}=queued[num];
@@ -621,8 +634,7 @@ async function calcPA(num){
         indir_unit:c.indirUnit,mins:c.mins
       }))};
     }
-    queued[num].ctMap=ctMap;
-    queued[num].compMap=compMap;
+    if(queued[num]){queued[num].ctMap=ctMap;queued[num].compMap=compMap;}
   }catch(e){console.error('calcPA error:',e);}
   if(btn){btn.classList.remove('calc-spin');}
   renderProgGrid();
@@ -1107,7 +1119,7 @@ document.getElementById('xlsIn').addEventListener('change',function(e){
 
     // Show period info
     const pi2=document.getElementById('progPeriodInfo');
-    if(pi2)pi2.textContent=`${fmt(PROG_DATE_MIN)} → ${fmt(PROG_DATE_MAX)} · ${totalDays}d úteis`;
+    if(pi2)pi2.textContent=`${totalDays}d úteis disponíveis`;
 
     // Set horizon to full if data spans more than a week
     if(totalDays>5&&HORIZON==='week')setHorizon('full');
