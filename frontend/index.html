@@ -945,6 +945,7 @@ function renderFabSectorDetail(sectorKey,filterStatus='ALL',searchTerm=''){
   entries.forEach(([ct,load])=>{
     const s=defS(ct),cap=capMin(ct),pct=cap>0?Math.round(load/cap*100):0;
     const col=semC(pct),bw=Math.min(Math.round(load/maxLoad*100),100),name=CT_NAMES[ct]||'';
+    const isCustom=ctSets[ct]&&Object.keys(ctSets[ct]).some(k=>k!=='hc');
     const tr=document.createElement('tr');tr.className='ct-main-tr';tr.style.borderBottom='1px solid var(--border2)';
     tr.innerHTML=`
       <td style="padding:10px 12px"><div class="ct-name" style="color:var(--accent3)">${ct}</div><div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-top:2px">${CT_NAMES[ct]||''}</div></td>
@@ -962,13 +963,9 @@ function renderFabSectorDetail(sectorKey,filterStatus='ALL',searchTerm=''){
         <button class="ct-edit-btn" data-ct="${ct}" onclick="inlineEditCT('${ct}',this)">✏</button>
         ${isCustom?`<button class="ct-edit-btn" data-ct="${ct}" onclick="resetCT('${ct}')" title="Restaurar padrão" style="margin-left:2px">↺</button>`:''}
       </td>`;
-    tr.querySelectorAll('.tci').forEach(inp=>inp.addEventListener('change',e=>{
-      e.stopPropagation();const c=e.target.dataset.ct,f=e.target.dataset.f;
-      if(!ctSets[c])ctSets[c]={...defS(c)};ctSets[c][f]=parseFloat(e.target.value)||1;
-      saveCtSets();renderFabSectorDetail(sectorKey,filterStatus,searchTerm);
-    }));
+
     tr.querySelector('.det-open').addEventListener('click',e=>{e.stopPropagation();openDetail(ct,load,cap,pct,'fab');});
-    tr.addEventListener('click',e=>{if(e.target.classList.contains('tci'))return;openDetail(ct,load,cap,pct,'fab');});
+
     tbody.appendChild(tr);
   });
   if(!entries.length){tbody.innerHTML=`<tr><td colspan="11" style="padding:24px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3);text-align:center">Nenhum CT encontrado</td></tr>`;}
