@@ -748,7 +748,7 @@ function renderSector(sector){
   const maxLoad=entries[0]?.[1]||1;
   const scroll=document.createElement('div');scroll.className='ct-scroll';
   const tbl=document.createElement('table');tbl.className='ctt';
-  tbl.innerHTML=`<thead><tr><th>CT</th><th>Carga</th><th>Cap.</th><th style="width:44px;text-align:center">Turnos</th><th style="width:54px;text-align:center">H/Turno</th><th style="width:44px;text-align:center">Dias</th><th style="width:52px;text-align:center">Efic %</th><th style="width:48px">%</th><th style="width:90px">Barra</th><th style="width:62px">Status</th><th style="width:28px"></th></tr></thead>`;
+  tbl.innerHTML=`<thead><tr><th>CT</th><th>Carga</th><th>Cap.</th><th style="width:44px;text-align:center">Turnos</th><th style="width:54px;text-align:center">H/Turno</th><th style="width:44px;text-align:center">Dias</th><th style="width:52px;text-align:center">Efic %</th><th style="width:48px">%</th><th style="width:90px">Barra</th><th style="width:62px">Status</th><th style="width:70px;text-align:right">Ações</th></tr></thead>`;
   const tbody=document.createElement('tbody');
   buildCTRows(entries,tbody,maxLoad,'#9d84f5','mont');
   tbl.appendChild(tbody);scroll.appendChild(tbl);body.appendChild(scroll);
@@ -775,10 +775,10 @@ function buildCTRows(entries,tbody,maxLoad,ctColor,sectorClass){
           ${isCustom?'<span class="ct-custom-badge">⚙ personalizado</span>':''}</td>
       <td class="ct-load-val">${fmtH(load)}</td>
       <td class="ct-cap-val">${fmtH(cap)}</td>
-      <td style="padding:2px 4px"><input class="tci" type="number" min="1" max="3" value="${s.turnos}" data-ct="${ct}" data-f="turnos"></td>
-      <td style="padding:2px 4px"><input class="tci" type="number" min="1" max="12" value="${s.hturno}" data-ct="${ct}" data-f="hturno"></td>
-      <td style="padding:2px 4px"><input class="tci" type="number" min="1" max="31" value="${s.dias}" data-ct="${ct}" data-f="dias"></td>
-      <td style="padding:2px 4px"><input class="tci" type="number" min="1" max="100" value="${s.efic}" data-ct="${ct}" data-f="efic"></td>
+      <td style="padding:5px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center" data-field="turnos">${s.turnos}</td>
+      <td style="padding:5px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center" data-field="hturno">${s.hturno}</td>
+      <td style="padding:5px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center" data-field="dias">${s.dias}</td>
+      <td style="padding:5px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center" data-field="efic">${s.efic}</td>
       <td class="ct-pct" style="color:${col}">${pct}%
         ${excessStr?`<span class="excess-badge">${excessStr} acima</span>`:''}
       </td>
@@ -789,30 +789,50 @@ function buildCTRows(entries,tbody,maxLoad,ctColor,sectorClass){
         <button class="ct-edit-btn" data-ct="${ct}" onclick="inlineEditCT('${ct}',this)">✏</button>
         ${isCustom?`<button class="ct-edit-btn" data-ct="${ct}" onclick="resetCT('${ct}')" title="Restaurar padrão" style="margin-left:2px">↺</button>`:''}
       </td>`;
-    tr.querySelectorAll('.tci').forEach(inp=>inp.addEventListener('change',e=>{
-      e.stopPropagation();const c=e.target.dataset.ct,f=e.target.dataset.f;
-      if(!ctSets[c])ctSets[c]={};ctSets[c][f]=parseFloat(e.target.value)||1;
-      saveCtSets();renderSector(activeSector);renderExecPanel();
-      if(document.getElementById('paramsBody'))renderParamsTable();
-    }));
+
     tr.querySelector('.det-open').addEventListener('click',e=>{e.stopPropagation();openDetail(ct,load,cap,pct,sectorClass);});
     tbody.appendChild(tr);
   });
 }
 
 function inlineEditCT(ct,btn){
-  // Toggle inline edit mode — inputs already exist in row, just highlight
   const row=btn.closest('tr');
   const isEditing=row.classList.contains('ct-editing');
-  row.classList.toggle('ct-editing',!isEditing);
-  btn.textContent=isEditing?'✏':'✔';
-  btn.style.color=isEditing?'':'var(--green)';
+
   if(isEditing){
-    // Save on close
+    // SAVE: read input values → ctSets → sync params
+    const s=defS(ct);
+    row.querySelectorAll('td[data-field]').forEach(td=>{
+      const f=td.dataset.field;
+      const inp=td.querySelector('input');
+      if(inp){
+        const val=parseFloat(inp.value)||s[f];
+        if(!ctSets[ct])ctSets[ct]={};
+        ctSets[ct][f]=val;
+        // Restore to text display
+        td.textContent=val;
+      }
+    });
+    row.classList.remove('ct-editing');
+    btn.textContent='✏';btn.style.color='';
     saveCtSets();
     renderSector(activeSector);
     renderExecPanel();
     if(document.getElementById('paramsBody'))renderParamsTable();
+  } else {
+    // EDIT: transform cells into inputs
+    const s=defS(ct);
+    const fields={turnos:{min:1,max:3},hturno:{min:1,max:24},dias:{min:1,max:31},efic:{min:1,max:100}};
+    row.querySelectorAll('td[data-field]').forEach(td=>{
+      const f=td.dataset.field;
+      const cfg=fields[f];
+      td.innerHTML=`<input type="number" min="${cfg.min}" max="${cfg.max}" value="${s[f]}"
+        style="width:52px;background:var(--s1);border:1px solid var(--accent2);padding:3px 4px;
+               font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent3);
+               outline:none;text-align:center;">`;
+    });
+    row.classList.add('ct-editing');
+    btn.textContent='✔';btn.style.color='var(--green)';
   }
 }
 
@@ -920,7 +940,7 @@ function renderFabSectorDetail(sectorKey,filterStatus='ALL',searchTerm=''){
 
   const scroll=document.createElement('div');scroll.className='ct-scroll';
   const tbl=document.createElement('table');tbl.className='ctt';tbl.style.width='100%';
-  tbl.innerHTML=`<thead><tr><th>CT</th><th>Carga</th><th>Cap.</th><th style="width:54px;text-align:center">Turnos</th><th style="width:64px;text-align:center">H/Turno</th><th style="width:54px;text-align:center">Dias</th><th style="width:62px;text-align:center">Efic %</th><th style="width:58px">%</th><th style="min-width:100px">Ocupação</th><th style="width:72px">Status</th><th style="width:28px"></th></tr></thead>`;
+  tbl.innerHTML=`<thead><tr><th>CT</th><th>Carga</th><th>Cap.</th><th style="width:54px;text-align:center">Turnos</th><th style="width:64px;text-align:center">H/Turno</th><th style="width:54px;text-align:center">Dias</th><th style="width:62px;text-align:center">Efic %</th><th style="width:58px">%</th><th style="min-width:100px">Ocupação</th><th style="width:72px">Status</th><th style="width:70px;text-align:right">Ações</th></tr></thead>`;
   const tbody=document.createElement('tbody');
   entries.forEach(([ct,load])=>{
     const s=defS(ct),cap=capMin(ct),pct=cap>0?Math.round(load/cap*100):0;
@@ -1294,7 +1314,7 @@ function searchByComponent(code){
   if(!results.length){wrap.innerHTML=`<div class="prog-empty" style="height:160px"><div class="prog-empty-icon">◈</div><div>Componente não encontrado</div></div>`;return;}
   wrap.innerHTML='';
   const tbl=document.createElement('table');tbl.className='det-ops';tbl.style.cssText='width:100%;';
-  tbl.innerHTML=`<thead><tr><td colspan="5" style="padding:8px 10px;font-size:12px;font-weight:700;color:var(--text);border-bottom:1px solid var(--border)"><span style="font-family:JetBrains Mono,monospace;color:var(--accent3)">${code}</span> · ${results[0]?.desc||''}</td></tr><tr><th style="width:100px">CT</th><th>Nome CT</th><th style="width:80px;text-align:right">INDIR min/pc</th><th style="width:90px;text-align:right">QTD PROG</th><th style="width:28px"></th></tr></thead>`;
+  tbl.innerHTML=`<thead><tr><td colspan="5" style="padding:8px 10px;font-size:12px;font-weight:700;color:var(--text);border-bottom:1px solid var(--border)"><span style="font-family:JetBrains Mono,monospace;color:var(--accent3)">${code}</span> · ${results[0]?.desc||''}</td></tr><tr><th style="width:100px">CT</th><th>Nome CT</th><th style="width:80px;text-align:right">INDIR min/pc</th><th style="width:90px;text-align:right">QTD PROG</th><th style="width:70px;text-align:right">Ações</th></tr></thead>`;
   const tbody=document.createElement('tbody');
   results.forEach(({ct,item,desc,progQty,paList})=>{
     const hasPAs=paList.length>0;const ps=progQty>0?'color:var(--green)':'color:var(--text3)';
@@ -1551,3 +1571,4 @@ init();
 </div>
 </body>
 </html>
+
