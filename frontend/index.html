@@ -193,6 +193,37 @@ table.ctt th{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--te
   color:var(--text3);cursor:pointer;letter-spacing:.08em;transition:all .15s;}
 .hz-btn:hover{border-color:var(--accent2);color:var(--accent3);}
 .hz-btn.active{background:rgba(37,99,168,.2);border-color:var(--accent2);color:var(--accent3);}
+
+/* Executive panel */
+.exec-panel{display:flex;gap:10px;padding:10px 16px;flex-shrink:0;border-bottom:1px solid var(--border);background:var(--s1);flex-wrap:wrap;align-items:stretch;}
+.exec-card{background:var(--bg);border:1px solid var(--border2);padding:8px 14px;min-width:130px;display:flex;flex-direction:column;gap:2px;}
+.exec-card.critical{border-color:#b91c1c;background:rgba(185,28,28,.07);}
+.exec-card.warning{border-color:#92400e;background:rgba(146,64,14,.07);}
+.exec-card.ok{border-color:#166534;background:rgba(22,101,52,.07);}
+.exec-label{font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;}
+.exec-value{font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:800;line-height:1;}
+.exec-sub{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);}
+
+/* Ranking panel */
+.ranking-panel{flex-shrink:0;border-bottom:1px solid var(--border);background:var(--bg);overflow:hidden;max-height:0;transition:max-height .3s;}
+.ranking-panel.open{max-height:220px;}
+.ranking-inner{padding:8px 16px;display:flex;gap:6px;flex-wrap:wrap;}
+.rank-item{display:flex;align-items:center;gap:6px;background:var(--s2);border:1px solid var(--border);padding:4px 10px;font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer;transition:border-color .1s;min-width:160px;}
+.rank-item:hover{border-color:var(--accent2);}
+.rank-num{color:var(--text3);width:16px;}
+.rank-ct{color:var(--accent3);font-weight:700;}
+.rank-pct{margin-left:auto;font-weight:800;}
+.rank-excess{font-size:8px;color:var(--text3);margin-left:4px;}
+
+/* Gargalo filter */
+.gargalo-filter{display:flex;gap:3px;}
+.gf-btn{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;padding:3px 8px;border:1px solid var(--border2);background:transparent;color:var(--text3);cursor:pointer;letter-spacing:.06em;transition:all .15s;}
+.gf-btn.active{background:rgba(185,28,28,.15);border-color:#b91c1c;color:#ef4444;}
+
+/* CT row visual hierarchy */
+.ct-row-critical td{background:rgba(185,28,28,.04)!important;}
+.ct-row-warning td{background:rgba(146,64,14,.03)!important;}
+.excess-badge{font-family:'JetBrains Mono',monospace;font-size:8px;color:#ef4444;display:block;margin-top:1px;}
 </style>
 </head>
 <body>
@@ -266,6 +297,10 @@ table.ctt th{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--te
       <div class="consol-sub" id="consolSub">—</div>
       <button class="recalc" id="recalcBtn">↺ Recalcular</button>
     </div>
+    <div class="exec-panel" id="execPanel">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3)">Calcule a programação para ver o painel executivo</div>
+    </div>
+    <div class="ranking-panel" id="rankingPanel"></div>
     <div class="consol-bottom">
       <div class="sector-tabs">
         <div class="stab active fab" data-sc="fab">Fabricação</div>
@@ -684,6 +719,7 @@ function renderConsol(){
   const{ctMap,compMap}=getGlobalMaps();
   globalCTMap=ctMap;globalCompMap=compMap;
   renderLinhaCards();
+  renderExecPanel();
   renderSector(activeSector);
 }
 
@@ -713,12 +749,13 @@ function buildCTRows(entries,tbody,maxLoad,ctColor,sectorClass){
   entries.forEach(([ct,load])=>{
     const s=defS(ct);const cap=capMin(ct);
     const pct=cap>0?Math.round(load/cap*100):0;
+    if(gargaloFilter==='gargalos'&&pct<80)return;
     const col=semC(pct);const bw=Math.min(Math.round(load/maxLoad*100),100);
     const name=CT_NAMES[ct]||'';
-    // Get color from sector definition if available
     const ctSec=getSectorForCT(ct);
     const rowColor=ctSec?ctSec.color:ctColor;
-    const tr=document.createElement('tr');tr.className='ct-main-tr';
+    const rowClass=pct>=100?'ct-main-tr ct-row-critical':pct>=80?'ct-main-tr ct-row-warning':'ct-main-tr';
+    const tr=document.createElement('tr');tr.className=rowClass;
     tr.innerHTML=`
       <td><div class="ct-name" style="color:${rowColor}">${ct}</div>
           <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-top:1px">${name}</div></td>
@@ -728,7 +765,8 @@ function buildCTRows(entries,tbody,maxLoad,ctColor,sectorClass){
       <td style="padding:2px 4px"><input class="tci" type="number" min="1" max="12" value="${s.hturno}" data-ct="${ct}" data-f="hturno"></td>
       <td style="padding:2px 4px"><input class="tci" type="number" min="1" max="31" value="${s.dias}" data-ct="${ct}" data-f="dias"></td>
       <td style="padding:2px 4px"><input class="tci" type="number" min="1" max="100" value="${s.efic}" data-ct="${ct}" data-f="efic"></td>
-      <td class="ct-pct" style="color:${col}">${pct}%</td>
+      <td class="ct-pct" style="color:${col}">${pct}%${pct>100?`<span class="excess-badge">+${Math.floor((load-cap)/60)}h${Math.round((load-cap)%60)>0?Math.round((load-cap)%60)+'m':''}</span>`:''}
+      </td>
       <td><div class="ct-bar-bg"><div class="ct-bar-fill" style="width:${bw}%;background:${col}"></div></div></td>
       <td class="ct-status" style="color:${col}">${semTxt(pct)}</td>
       <td><span class="det-open" style="cursor:pointer;color:var(--text3);font-size:11px;padding:0 4px" data-ct="${ct}">▶</span></td>`;
@@ -773,7 +811,10 @@ function renderFabSectorCards(){
             <path d="M9 53 A46 46 0 0 1 101 53" fill="none" stroke="var(--border2)" stroke-width="10" stroke-linecap="butt"/>
             <path d="M9 53 A46 46 0 0 1 101 53" fill="none" stroke="${col}" stroke-width="9" stroke-linecap="round" stroke-dasharray="${fill} ${circ}" />
           </svg>
-          <div style="position:absolute;bottom:0;left:0;right:0;text-align:center;font-family:'JetBrains Mono',monospace;font-size:17px;font-weight:800;color:${col};letter-spacing:.02em">${pct}%</div>
+          <div style="position:absolute;bottom:0;left:0;right:0;text-align:center;">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:17px;font-weight:800;color:${col};letter-spacing:.02em">${pct}%</div>
+            ${pct>100?`<div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:#ef4444">+${Math.floor((load-cap)/60)}h excesso</div>`:''}
+          </div>
         </div>
       </div>
       <div style="padding:2px 10px 8px;display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.04em;">
@@ -1307,6 +1348,100 @@ function saveParams(){
 function resetParams(){
   if(!confirm('Resetar todos os parâmetros para padrão?'))return;
   ctSets={};saveCtSets();renderParamsTable();
+}
+
+
+// ── EXECUTIVE PANEL ───────────────────────────────────────────────────
+let gargaloFilter='all'; // all | gargalos
+let rankingOpen=false;
+
+function buildExecStats(){
+  // Collect all CT loads
+  const ctLoads=Object.entries(globalCTMap).map(([ct,load])=>{
+    const cap=capMin(ct);
+    const pct=cap>0?Math.round(load/cap*100):0;
+    const excess=Math.max(0,load-cap);
+    return{ct,load,cap,pct,excess};
+  }).filter(x=>x.cap>0);
+
+  const critical=ctLoads.filter(x=>x.pct>=100);
+  const warning=ctLoads.filter(x=>x.pct>=80&&x.pct<100);
+  const top=ctLoads.sort((a,b)=>b.pct-a.pct)[0];
+  const totalExcess=ctLoads.reduce((s,x)=>s+x.excess,0);
+  const ranking=ctLoads.filter(x=>x.pct>0).sort((a,b)=>b.pct-a.pct).slice(0,10);
+  return{critical,warning,top,totalExcess,ranking,ctLoads};
+}
+
+function renderExecPanel(){
+  let panel=document.getElementById('execPanel');
+  if(!panel)return;
+  if(!Object.keys(globalCTMap).length){
+    panel.innerHTML='<div style="font-family:JetBrains Mono,monospace;font-size:10px;color:var(--text3);padding:8px">Calcule a programação para ver o painel executivo</div>';
+    return;
+  }
+  const{critical,warning,top,totalExcess,ranking}=buildExecStats();
+  const topPct=top?top.pct:0;
+  const topColor=topPct>=100?'#ef4444':topPct>=80?'#f59e0b':'#22c55e';
+  const excessH=Math.floor(totalExcess/60),excessM=Math.round(totalExcess%60);
+  const excessStr=excessH>0?excessH+'h '+String(excessM).padStart(2,'0')+'m':excessM+'m';
+
+  panel.innerHTML=`
+    <div class="exec-card ${critical.length>0?'critical':'ok'}">
+      <div class="exec-label">CTs Críticos</div>
+      <div class="exec-value" style="color:${critical.length>0?'#ef4444':'#22c55e'}">${critical.length}</div>
+      <div class="exec-sub">${warning.length} em alerta</div>
+    </div>
+    <div class="exec-card ${topPct>=100?'critical':topPct>=80?'warning':'ok'}" style="cursor:pointer" onclick="document.getElementById('rankingPanel').classList.toggle('open');rankingOpen=!rankingOpen;">
+      <div class="exec-label">Maior Gargalo ▾</div>
+      <div class="exec-value" style="color:${topColor}">${top?top.ct:'—'}</div>
+      <div class="exec-sub">${topPct}% ocupação</div>
+    </div>
+    <div class="exec-card ${totalExcess>0?'critical':'ok'}">
+      <div class="exec-label">Excesso Total</div>
+      <div class="exec-value" style="color:${totalExcess>0?'#ef4444':'#22c55e'};font-size:14px">${totalExcess>0?'+'+excessStr:'0'}</div>
+      <div class="exec-sub">acima da capacidade</div>
+    </div>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:6px;">
+      <div class="gargalo-filter">
+        <button class="gf-btn ${gargaloFilter==='all'?'active':''}" onclick="setGargaloFilter('all')">TODOS</button>
+        <button class="gf-btn ${gargaloFilter==='gargalos'?'active':''}" onclick="setGargaloFilter('gargalos')">GARGALOS</button>
+      </div>
+    </div>`;
+
+  // Ranking panel
+  let rPanel=document.getElementById('rankingPanel');
+  if(rPanel){
+    rPanel.innerHTML=`<div class="ranking-inner">${ranking.map((x,i)=>{
+      const exH=Math.floor(x.excess/60),exM=Math.round(x.excess%60);
+      const exStr=x.excess>0?'+'+(exH>0?exH+'h ':'')+exM+'m':'';
+      const col=x.pct>=100?'#ef4444':x.pct>=80?'#f59e0b':'#22c55e';
+      return`<div class="rank-item" onclick="openDetailFromRanking('${x.ct}',${x.load},${x.cap},${x.pct})">
+        <span class="rank-num">${i+1}</span>
+        <span class="rank-ct">${x.ct}</span>
+        <span style="font-size:8px;color:var(--text3);flex:1">${CT_NAMES[x.ct]?CT_NAMES[x.ct].slice(0,20):''}</span>
+        <span class="rank-pct" style="color:${col}">${x.pct}%</span>
+        ${exStr?`<span class="rank-excess">${exStr}</span>`:''}
+      </div>`;
+    }).join('')}</div>`;
+    if(rankingOpen)rPanel.classList.add('open');
+  }
+}
+
+function openDetailFromRanking(ct,load,cap,pct){
+  const sectorClass=isFab(ct)?'fab':'mont';
+  openDetail(ct,load,cap,pct,sectorClass);
+}
+
+function setGargaloFilter(f){
+  gargaloFilter=f;
+  renderExecPanel();
+  // Re-render current sector view with filter
+  if(activeSector==='fab'){
+    if(activeFabSector)renderFabSectorDetail(activeFabSector);
+    else renderFabSectorCards();
+  } else {
+    renderSector('mont');
+  }
 }
 
 
