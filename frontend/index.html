@@ -35,8 +35,11 @@ body{background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;di
 .login-err{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--red);text-align:center;min-height:14px;}
 .profile-badge{font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 8px;border-radius:2px;font-weight:700;letter-spacing:.08em;cursor:pointer;}
 .profile-badge.admin{background:rgba(37,99,168,.2);border:1px solid var(--accent2);color:var(--accent3);}
+.profile-badge.viewer{background:rgba(74,106,130,.15);border:1px solid var(--border2);color:var(--text2);}
 .profile-badge.visitor{background:rgba(74,106,130,.1);border:1px solid var(--border2);color:var(--text3);}
-.visitor-overlay{position:fixed;inset:0;z-index:0;pointer-events:none;}/* just a tag, real blocking via JS */
+.admin-users-btn{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.08em;padding:2px 10px;border:1px solid var(--border2);background:transparent;color:var(--text3);cursor:pointer;border-radius:2px;transition:all .15s;display:none;}
+.admin-users-btn:hover{border-color:var(--accent2);color:var(--accent3);}
+.visitor-overlay{position:fixed;inset:0;z-index:0;pointer-events:none;}
 
 /* TOPBAR */
 .topbar{height:42px;background:var(--s1);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:16px;flex-shrink:0;}
@@ -260,17 +263,40 @@ table.ctt th{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--te
   <div class="login-box">
     <div class="login-logo">Alliage · PCP</div>
     <div class="login-title">Painel de Capacidade</div>
-    <div class="login-field">
-      <div class="login-label">Usuário</div>
-      <input class="login-input" type="text" id="loginUser" placeholder="usuário" autocomplete="username">
+
+    <!-- LOGIN FORM -->
+    <div id="loginFormArea" style="display:flex;flex-direction:column;gap:12px;">
+      <div class="login-field">
+        <div class="login-label">Usuário</div>
+        <input class="login-input" type="text" id="loginUser" placeholder="usuário" autocomplete="username">
+      </div>
+      <div class="login-field">
+        <div class="login-label">Senha</div>
+        <input class="login-input" type="password" id="loginPwd" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <div class="login-err" id="loginErr"></div>
+      <button class="login-btn" onclick="doLogin()">Entrar</button>
+      <div style="display:flex;gap:6px;">
+        <button class="login-btn-visitor" onclick="doLoginVisitor()" style="flex:1;">Entrar como Visitante</button>
+        <button class="login-btn-visitor" onclick="showRegisterForm()" style="flex:1;">Solicitar Acesso</button>
+      </div>
     </div>
-    <div class="login-field">
-      <div class="login-label">Senha</div>
-      <input class="login-input" type="password" id="loginPwd" placeholder="••••••••" autocomplete="current-password">
+
+    <!-- REGISTER FORM -->
+    <div id="registerFormArea" style="display:none;flex-direction:column;gap:12px;">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);letter-spacing:.06em;">Preencha os dados — seu acesso será liberado pelo administrador.</div>
+      <div class="login-field">
+        <div class="login-label">Usuário</div>
+        <input class="login-input" type="text" id="regUser" placeholder="escolha um usuário">
+      </div>
+      <div class="login-field">
+        <div class="login-label">Senha</div>
+        <input class="login-input" type="password" id="regPwd" placeholder="••••••••">
+      </div>
+      <div class="login-err" id="regErr"></div>
+      <button class="login-btn" id="regBtn" onclick="doRegister()">Solicitar Acesso</button>
+      <button class="login-btn-visitor" onclick="showLoginForm()">← Voltar ao login</button>
     </div>
-    <div class="login-err" id="loginErr"></div>
-    <button class="login-btn" onclick="doLogin()">Entrar</button>
-    <button class="login-btn-visitor" onclick="doLoginVisitor()">Entrar como Visitante</button>
   </div>
 </div>
 
@@ -285,6 +311,7 @@ table.ctt th{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--te
     <div class="tstat">Roteiros: <b id="sRot">—</b></div>
     <div class="tstat" style="display:none"><b id="sProgN">0</b></div>
     <span id="profileBadge" class="profile-badge" onclick="doLogout()" title="Clique para sair"></span>
+    <button id="adminUsersBtn" class="admin-users-btn" onclick="openAdminUsers()" title="Gerenciar usuários">⚙ USUÁRIOS</button>
   </div>
 </div>
 
@@ -450,87 +477,209 @@ let activeSector='fab', activeFabSector=null, selectedCT=null;
 let rActiveCT=null, rSortCol='indir', rSortAsc=false, rSectorFilter='ALL';
 let paramTab='fab'; // 'fab' | 'mont'
 
-// ── PERFIS ────────────────────────────────────────────────────────────
-// Credenciais admin — uso interno (opção A, sem segurança server-side)
-const USERS={
-  'carlos':  {pwd:'alliage2025', role:'admin',   label:'ADMIN'},
-  'admin':   {pwd:'alliage2025', role:'admin',   label:'ADMIN'},
-};
-let currentRole='';
+// ── AUTH ──────────────────────────────────────────────────────────────
+let currentRole='';   // 'admin' | 'viewer' | 'visitor'
 let currentUser='';
+let authToken='';
 
 function isAdmin(){return currentRole==='admin';}
+function isViewer(){return currentRole==='viewer';}
+function isVisitor(){return currentRole==='visitor';}
+function canEdit(){return isAdmin();}
 
-function applyLogin(role, user, label){
-  currentRole=role;
-  currentUser=user;
-  sessionStorage.setItem('pcp_role', role);
-  sessionStorage.setItem('pcp_user', user);
+function authHeaders(){
+  return authToken?{'Authorization':'Bearer '+authToken,'Content-Type':'application/json'}:{'Content-Type':'application/json'};
+}
+
+function _setLoginErr(msg){
+  const el=document.getElementById('loginErr');
+  if(el){el.textContent=msg;setTimeout(()=>el.textContent='',3000);}
+}
+
+function _activateSession(token,username,role){
+  authToken=token;currentUser=username;currentRole=role;
+  sessionStorage.setItem('pcp_token',token);
+  sessionStorage.setItem('pcp_user',username);
+  sessionStorage.setItem('pcp_role',role);
   document.getElementById('loginScreen').style.display='none';
   const badge=document.getElementById('profileBadge');
-  badge.textContent=label+(user&&role==='admin'?' · '+user.toUpperCase():'');
-  badge.className='profile-badge '+(isAdmin()?'admin':'visitor');
+  const roleLabel=role==='admin'?'ADMIN':role==='viewer'?username.toUpperCase():'VISITANTE';
+  badge.textContent=roleLabel;
+  badge.className='profile-badge '+(isAdmin()?'admin':isViewer()?'viewer':'visitor');
   applyRoleRestrictions();
+  // Show admin panel button
+  const adminBtn=document.getElementById('adminUsersBtn');
+  if(adminBtn)adminBtn.style.display=isAdmin()?'':'none';
   init();
 }
 
-function doLogin(){
+async function doLogin(){
   const user=document.getElementById('loginUser').value.trim().toLowerCase();
   const pwd=document.getElementById('loginPwd').value;
-  const err=document.getElementById('loginErr');
-  const profile=USERS[user];
-  if(!profile||profile.pwd!==pwd){
-    err.textContent='Usuário ou senha incorretos.';
-    setTimeout(()=>err.textContent='',2500);
-    document.getElementById('loginPwd').value='';
-    return;
-  }
-  applyLogin(profile.role, user, profile.label);
+  if(!user||!pwd){_setLoginErr('Preencha usuário e senha.');return;}
+  const btn=document.querySelector('.login-btn');
+  btn.textContent='Entrando...';btn.disabled=true;
+  try{
+    const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:user,password:pwd})});
+    const d=await r.json();
+    if(!r.ok){_setLoginErr(d.detail||'Erro ao entrar.');document.getElementById('loginPwd').value='';return;}
+    _activateSession(d.token,d.username,d.role);
+  }catch(e){_setLoginErr('Erro de conexão.');}
+  finally{btn.textContent='Entrar';btn.disabled=false;}
+}
+
+async function doRegister(){
+  const user=document.getElementById('regUser').value.trim().toLowerCase();
+  const pwd=document.getElementById('regPwd').value;
+  const err=document.getElementById('regErr');
+  if(!user||!pwd){err.textContent='Preencha todos os campos.';return;}
+  const btn=document.getElementById('regBtn');
+  btn.textContent='Enviando...';btn.disabled=true;
+  try{
+    const r=await fetch('/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:user,password:pwd})});
+    const d=await r.json();
+    if(!r.ok){err.textContent=d.detail||'Erro ao cadastrar.';return;}
+    err.style.color='var(--green)';err.textContent='Solicitação enviada! Aguarde aprovação.';
+    setTimeout(()=>{showLoginForm();err.style.color='var(--red)';err.textContent='';},2500);
+  }catch(e){err.textContent='Erro de conexão.';}
+  finally{btn.textContent='Solicitar Acesso';btn.disabled=false;}
 }
 
 function doLoginVisitor(){
-  applyLogin('visitor','','VISITANTE');
+  _activateSession('','','visitor');
 }
 
-function doLogout(){
+async function doLogout(){
   if(!confirm('Sair?'))return;
-  sessionStorage.removeItem('pcp_role');
-  sessionStorage.removeItem('pcp_user');
-  currentRole='';currentUser='';
+  if(authToken){try{await fetch('/api/auth/logout',{method:'POST',headers:authHeaders()});}catch(e){}}
+  authToken='';currentUser='';currentRole='';
+  sessionStorage.removeItem('pcp_token');sessionStorage.removeItem('pcp_user');sessionStorage.removeItem('pcp_role');
   document.getElementById('loginScreen').style.display='flex';
-  document.getElementById('loginUser').value='';
-  document.getElementById('loginPwd').value='';
+  document.getElementById('loginUser').value='';document.getElementById('loginPwd').value='';
+  showLoginForm();
   setTimeout(()=>document.getElementById('loginUser')?.focus(),100);
 }
 
+function showLoginForm(){
+  document.getElementById('loginFormArea').style.display='flex';
+  document.getElementById('registerFormArea').style.display='none';
+}
+function showRegisterForm(){
+  document.getElementById('loginFormArea').style.display='none';
+  document.getElementById('registerFormArea').style.display='flex';
+  setTimeout(()=>document.getElementById('regUser')?.focus(),50);
+}
+
 function applyRoleRestrictions(){
+  // Always clean up first
+  document.getElementById('visitor-style')?.remove();
+  const showAll=ids=>ids.forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='';});
+  document.querySelectorAll('.xls-btn').forEach(el=>el.style.display='');
+  showAll(['calcAll','clearProg','paramsSaveBtn','paramsResetBtn']);
   if(isAdmin())return;
+  // Visitor/viewer: restrict
   const hide=ids=>ids.forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none';});
   hide(['calcAll','clearProg','paramsSaveBtn','paramsResetBtn']);
   document.querySelectorAll('.xls-btn').forEach(el=>el.style.display='none');
   const style=document.createElement('style');
+  style.id='visitor-style';
   style.textContent='.tci{pointer-events:none;opacity:.5;} .ct-edit-btn{display:none!important;}';
   document.head.appendChild(style);
 }
 
 function checkAutoLogin(){
-  const savedRole=sessionStorage.getItem('pcp_role');
+  const savedToken=sessionStorage.getItem('pcp_token')||'';
   const savedUser=sessionStorage.getItem('pcp_user')||'';
-  if(['admin','visitor'].includes(savedRole)){
-    const label=savedRole==='admin'?'ADMIN':'VISITANTE';
-    currentRole=savedRole;currentUser=savedUser;
-    document.getElementById('loginScreen').style.display='none';
-    const badge=document.getElementById('profileBadge');
-    badge.textContent=label+(savedUser&&savedRole==='admin'?' · '+savedUser.toUpperCase():'');
-    badge.className='profile-badge '+(isAdmin()?'admin':'visitor');
-    applyRoleRestrictions();
-    init();
-    return true;
+  const savedRole=sessionStorage.getItem('pcp_role')||'';
+  if(['admin','viewer','visitor'].includes(savedRole)){
+    // Accept session regardless of token presence (token resets on backend redeploy anyway)
+    _activateSession(savedToken,savedUser,savedRole);return true;
   }
   setTimeout(()=>document.getElementById('loginUser')?.focus(),100);
   document.getElementById('loginPwd')?.addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
   document.getElementById('loginUser')?.addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('loginPwd')?.focus();});
   return false;
+}
+
+// ── PAINEL ADMIN USUÁRIOS ─────────────────────────────────────────────
+async function openAdminUsers(){
+  if(!isAdmin())return;
+  let panel=document.getElementById('adminUsersPanel');
+  if(panel){panel.remove();return;}
+  panel=document.createElement('div');
+  panel.id='adminUsersPanel';
+  panel.style.cssText='position:fixed;inset:0;background:rgba(6,9,15,.92);z-index:500;display:flex;align-items:center;justify-content:center;';
+  panel.innerHTML=`
+    <div style="background:var(--s1);border:1px solid var(--border2);width:700px;max-height:80vh;display:flex;flex-direction:column;border-radius:2px;">
+      <div style="padding:12px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0;">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.12em;color:var(--text2)">GERENCIAR USUÁRIOS</span>
+        <button onclick="document.getElementById('adminUsersPanel').remove()" style="margin-left:auto;background:transparent;border:1px solid var(--border2);color:var(--text3);font-family:'JetBrains Mono',monospace;font-size:10px;padding:2px 10px;cursor:pointer;">✕ Fechar</button>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:14px 18px;" id="adminUsersList">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3)">Carregando...</div>
+      </div>
+    </div>`;
+  document.body.appendChild(panel);
+  await refreshAdminUsers();
+}
+
+async function refreshAdminUsers(){
+  const list=document.getElementById('adminUsersList');
+  if(!list)return;
+  try{
+    const r=await fetch('/api/auth/users',{headers:authHeaders()});
+    const users=await r.json();
+    if(!r.ok){list.innerHTML=`<div style="color:var(--red);font-family:'JetBrains Mono',monospace;font-size:10px">${users.detail}</div>`;return;}
+    const statusColor={active:'var(--green)',pending:'var(--yellow)',blocked:'var(--red)'};
+    const statusLabel={active:'ATIVO',pending:'PENDENTE',blocked:'BLOQUEADO'};
+    list.innerHTML=`
+      <table style="width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:10px;">
+        <thead><tr style="border-bottom:1px solid var(--border);">
+          <th style="padding:5px 8px;text-align:left;color:var(--text3)">USUÁRIO</th>
+          <th style="padding:5px 8px;text-align:center;color:var(--text3)">PERFIL</th>
+          <th style="padding:5px 8px;text-align:center;color:var(--text3)">STATUS</th>
+          <th style="padding:5px 8px;text-align:center;color:var(--text3)">CADASTRO</th>
+          <th style="padding:5px 8px;text-align:right;color:var(--text3)">AÇÕES</th>
+        </tr></thead>
+        <tbody>
+          ${users.map(u=>{
+            const sc=statusColor[u.status]||'var(--text3)';
+            const sl=statusLabel[u.status]||u.status;
+            const dt=u.created_at?new Date(u.created_at).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit'}):'—';
+            const canApprove=u.status!=='active';
+            const canBlock=u.status!=='blocked';
+            const isAdm=u.role==='admin';
+            return`<tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:7px 8px;color:var(--accent3);font-weight:700">${u.username}</td>
+              <td style="padding:7px 8px;text-align:center;">
+                <select onchange="patchUser(${u.id},{role:this.value})" style="background:var(--bg);border:1px solid var(--border2);color:var(--text2);font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 4px;cursor:pointer;">
+                  <option value="viewer" ${!isAdm?'selected':''}>VIEWER</option>
+                  <option value="admin" ${isAdm?'selected':''}>ADMIN</option>
+                </select>
+              </td>
+              <td style="padding:7px 8px;text-align:center;color:${sc};font-weight:700">${sl}</td>
+              <td style="padding:7px 8px;text-align:center;color:var(--text3)">${dt}</td>
+              <td style="padding:7px 8px;text-align:right;white-space:nowrap;display:flex;gap:4px;justify-content:flex-end;">
+                ${canApprove?`<button onclick="patchUser(${u.id},{status:'active'})" style="padding:2px 8px;border:1px solid var(--green);background:rgba(22,163,74,.1);color:var(--green);font-family:'JetBrains Mono',monospace;font-size:9px;cursor:pointer;">✓ Aprovar</button>`:''}
+                ${canBlock?`<button onclick="patchUser(${u.id},{status:'blocked'})" style="padding:2px 8px;border:1px solid var(--border2);background:transparent;color:var(--text3);font-family:'JetBrains Mono',monospace;font-size:9px;cursor:pointer;">Bloquear</button>`:''}
+                <button onclick="deleteUser(${u.id},'${u.username}')" style="padding:2px 8px;border:1px solid var(--red);background:rgba(220,38,38,.1);color:var(--red);font-family:'JetBrains Mono',monospace;font-size:9px;cursor:pointer;">✕</button>
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>`;
+  }catch(e){list.innerHTML=`<div style="color:var(--red);font-family:'JetBrains Mono',monospace;font-size:10px">Erro: ${e.message}</div>`;}
+}
+
+async function patchUser(id,body){
+  await fetch(`/api/auth/users/${id}`,{method:'PATCH',headers:authHeaders(),body:JSON.stringify(body)});
+  refreshAdminUsers();
+}
+
+async function deleteUser(id,username){
+  if(!confirm(`Excluir usuário "${username}"?`))return;
+  await fetch(`/api/auth/users/${id}`,{method:'DELETE',headers:authHeaders()});
+  refreshAdminUsers();
 }
 
 // ── HORIZON STATE ─────────────────────────────────────────────────────
