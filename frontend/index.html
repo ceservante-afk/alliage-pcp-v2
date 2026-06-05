@@ -174,25 +174,20 @@ table.ctt th{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--te
 @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 
 #linhaCards{
-  height:50%;
-  flex-shrink:0;
-  overflow-y:auto;
-  overflow-x:hidden;
   display:grid;
   grid-template-columns:repeat(10,1fr);
   gap:0;
   align-content:start;
+  flex-shrink:0;
 }
 #linhaCards::-webkit-scrollbar{width:3px;}
 #linhaCards::-webkit-scrollbar-thumb{background:var(--border2);}
 .consol-bottom{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;}
 
-.hz-selector{display:flex;gap:2px;margin-left:16px;}
-.hz-btn{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;
-  padding:3px 8px;border:1px solid var(--border2);background:transparent;
-  color:var(--text3);cursor:pointer;letter-spacing:.08em;transition:all .15s;}
-.hz-btn:hover{border-color:var(--accent2);color:var(--accent3);}
-.hz-btn.active{background:rgba(37,99,168,.2);border-color:var(--accent2);color:var(--accent3);}
+
+
+
+
 
 /* Executive panel */
 .exec-panel{display:flex;gap:10px;padding:10px 16px;flex-shrink:0;border-bottom:1px solid var(--border);background:var(--s1);flex-wrap:wrap;align-items:stretch;}
@@ -224,6 +219,28 @@ table.ctt th{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--te
 .ct-row-critical td{background:rgba(185,28,28,.04)!important;}
 .ct-row-warning td{background:rgba(146,64,14,.03)!important;}
 .excess-badge{font-family:'JetBrains Mono',monospace;font-size:8px;color:#ef4444;display:block;margin-top:1px;}
+
+/* Collapsible linha cards */
+.linha-toggle{display:flex;align-items:center;gap:8px;padding:6px 16px;
+  border-bottom:1px solid var(--border);background:var(--s1);
+  cursor:pointer;flex-shrink:0;user-select:none;transition:background .1s;}
+.linha-toggle:hover{background:var(--s2);}
+.linha-toggle-label{font-family:'JetBrains Mono',monospace;font-size:9px;
+  font-weight:700;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;}
+.linha-toggle-arrow{font-size:9px;color:var(--text3);transition:transform .2s;}
+.linha-toggle-arrow.open{transform:rotate(180deg);}
+.linha-toggle-summary{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-left:auto;}
+#linhaCards{overflow:hidden;max-height:0;transition:max-height .3s ease;}
+#linhaCards.expanded{max-height:400px;overflow-y:auto;}
+
+/* Inline CT edit */
+.ct-edit-btn{background:transparent;border:1px solid var(--border2);color:var(--text3);
+  cursor:pointer;padding:2px 6px;font-family:'JetBrains Mono',monospace;font-size:9px;
+  transition:all .15s;white-space:nowrap;}
+.ct-edit-btn:hover{border-color:var(--accent2);color:var(--accent3);}
+.ct-custom-badge{font-family:'JetBrains Mono',monospace;font-size:8px;
+  color:var(--accent2);letter-spacing:.04em;white-space:nowrap;}
+.ct-editing td{background:rgba(37,99,168,.06)!important;}
 </style>
 </head>
 <body>
@@ -231,14 +248,7 @@ table.ctt th{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--te
 
 <div class="topbar">
   <div class="logo">PAINEL DE CONTROLE DE CAPACIDADE</div>
-  <div class="hz-selector">
-    <button class="hz-btn active" data-h="week">SEMANAL</button>
-    <button class="hz-btn" data-h="fortnight">QUINZENAL</button>
-    <button class="hz-btn" data-h="month">MENSAL</button>
-    <button class="hz-btn" data-h="full">COMPLETO</button>
-  </div>
-  <span id="horizonDays" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3)">5d úteis</span>
-  <span id="progPeriodInfo" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3)"></span>
+  <span id="progPeriodInfo" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-left:16px"></span>
   <div class="tbar-stats">
     <div class="tstat"><span class="sysdot"></span>ONLINE</div>
     <div class="tstat">PAs: <b id="sPAs">—</b></div>
@@ -492,7 +502,7 @@ function setHorizon(h){
   applyHorizon();
 }
 
-function defS(ct){return{turnos:ctSets[ct]?.turnos??1,hturno:ctSets[ct]?.hturno??8,dias:ctSets[ct]?.dias??getHorizonDays(),efic:ctSets[ct]?.efic??85};}
+function defS(ct){return{turnos:ctSets[ct]?.turnos??1,hturno:ctSets[ct]?.hturno??8,dias:ctSets[ct]?.dias??5,efic:ctSets[ct]?.efic??85};}
 function capMin(ct){const s=defS(ct);return s.turnos*s.hturno*s.dias*(s.efic/100)*60;}
 function saveCtSets(){try{localStorage.setItem('pcp_cts_v2',JSON.stringify(ctSets));}catch(e){}}
 
@@ -755,31 +765,66 @@ function buildCTRows(entries,tbody,maxLoad,ctColor,sectorClass){
     const ctSec=getSectorForCT(ct);
     const rowColor=ctSec?ctSec.color:ctColor;
     const rowClass=pct>=100?'ct-main-tr ct-row-critical':pct>=80?'ct-main-tr ct-row-warning':'ct-main-tr';
+    const excess=Math.max(0,load-cap);
+    const excessStr=excess>0?`+${Math.floor(excess/60)}h${Math.round(excess%60)>0?Math.round(excess%60)+'m':''}`:'';
+    const isCustom=ctSets[ct]&&Object.keys(ctSets[ct]).some(k=>k!=='_editing');
     const tr=document.createElement('tr');tr.className=rowClass;
     tr.innerHTML=`
       <td><div class="ct-name" style="color:${rowColor}">${ct}</div>
-          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-top:1px">${name}</div></td>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-top:1px">${name}</div>
+          ${isCustom?'<span class="ct-custom-badge">⚙ personalizado</span>':''}</td>
       <td class="ct-load-val">${fmtH(load)}</td>
       <td class="ct-cap-val">${fmtH(cap)}</td>
       <td style="padding:2px 4px"><input class="tci" type="number" min="1" max="3" value="${s.turnos}" data-ct="${ct}" data-f="turnos"></td>
       <td style="padding:2px 4px"><input class="tci" type="number" min="1" max="12" value="${s.hturno}" data-ct="${ct}" data-f="hturno"></td>
       <td style="padding:2px 4px"><input class="tci" type="number" min="1" max="31" value="${s.dias}" data-ct="${ct}" data-f="dias"></td>
       <td style="padding:2px 4px"><input class="tci" type="number" min="1" max="100" value="${s.efic}" data-ct="${ct}" data-f="efic"></td>
-      <td class="ct-pct" style="color:${col}">${pct}%${pct>100?`<span class="excess-badge">+${Math.floor((load-cap)/60)}h${Math.round((load-cap)%60)>0?Math.round((load-cap)%60)+'m':''}</span>`:''}
+      <td class="ct-pct" style="color:${col}">${pct}%
+        ${excessStr?`<span class="excess-badge">${excessStr} acima</span>`:''}
       </td>
       <td><div class="ct-bar-bg"><div class="ct-bar-fill" style="width:${bw}%;background:${col}"></div></div></td>
       <td class="ct-status" style="color:${col}">${semTxt(pct)}</td>
-      <td><span class="det-open" style="cursor:pointer;color:var(--text3);font-size:11px;padding:0 4px" data-ct="${ct}">▶</span></td>`;
+      <td style="padding:4px 6px;white-space:nowrap;display:flex;gap:3px;align-items:center">
+        <span class="det-open" style="cursor:pointer;color:var(--text3);font-size:11px" data-ct="${ct}">▶</span>
+        <button class="ct-edit-btn" data-ct="${ct}" onclick="inlineEditCT('${ct}',this)">✏</button>
+        ${isCustom?`<button class="ct-edit-btn" data-ct="${ct}" onclick="resetCT('${ct}')" title="Restaurar padrão" style="color:var(--text3)">↺</button>`:''}
+      </td>`;
     tr.querySelectorAll('.tci').forEach(inp=>inp.addEventListener('change',e=>{
       e.stopPropagation();const c=e.target.dataset.ct,f=e.target.dataset.f;
-      if(!ctSets[c])ctSets[c]={...defS(c)};ctSets[c][f]=parseFloat(e.target.value)||1;
-      saveCtSets();renderSector(activeSector);
+      if(!ctSets[c])ctSets[c]={};ctSets[c][f]=parseFloat(e.target.value)||1;
+      saveCtSets();renderSector(activeSector);renderExecPanel();
+      if(document.getElementById('paramsBody'))renderParamsTable();
     }));
     tr.querySelector('.det-open').addEventListener('click',e=>{e.stopPropagation();openDetail(ct,load,cap,pct,sectorClass);});
-    tr.addEventListener('click',e=>{if(e.target.classList.contains('tci'))return;openDetail(ct,load,cap,pct,sectorClass);});
     tbody.appendChild(tr);
   });
 }
+
+function inlineEditCT(ct,btn){
+  // Toggle inline edit mode — inputs already exist in row, just highlight
+  const row=btn.closest('tr');
+  const isEditing=row.classList.contains('ct-editing');
+  row.classList.toggle('ct-editing',!isEditing);
+  btn.textContent=isEditing?'✏':'✔';
+  btn.style.color=isEditing?'':'var(--green)';
+  if(isEditing){
+    // Save on close
+    saveCtSets();
+    renderSector(activeSector);
+    renderExecPanel();
+    if(document.getElementById('paramsBody'))renderParamsTable();
+  }
+}
+
+function resetCT(ct){
+  if(!confirm('Restaurar padrão para '+ct+'?'))return;
+  delete ctSets[ct];
+  saveCtSets();
+  renderSector(activeSector);
+  renderExecPanel();
+  if(document.getElementById('paramsBody'))renderParamsTable();
+}
+
 
 // ── FAB SECTOR CARDS ──────────────────────────────────────────────────
 function renderFabSectorCards(){
@@ -981,9 +1026,18 @@ function renderLinhaCards(){
 
   let container=document.getElementById('linhaCards');
   if(!container){
+    // Create toggle header
+    const toggle=document.createElement('div');
+    toggle.className='linha-toggle';
+    toggle.id='linhaToggle';
+    toggle.innerHTML=`<span class="linha-toggle-arrow" id="linhaArrow">▼</span>
+      <span class="linha-toggle-label">Resumo da Programação</span>
+      <span class="linha-toggle-summary" id="linhaSummary"></span>`;
+    toggle.addEventListener('click',toggleLinhaCards);
+    // Create cards container
     container=document.createElement('div');container.id='linhaCards';
     const st=document.querySelector('.sector-tabs')||document.querySelector('.consol-bottom');
-    if(st)st.parentNode.insertBefore(container,st);
+    if(st){st.parentNode.insertBefore(container,st);st.parentNode.insertBefore(toggle,container);}
   }
   if(!entries.length){container.style.display='none';return;}
   container.style.display='grid';
@@ -994,6 +1048,10 @@ function renderLinhaCards(){
     return h>0?h+'h '+String(mm).padStart(2,'0')+'m':mm+'m';
   }
 
+  const totalQty=entries.reduce((s,[,d])=>s+d.qty,0);
+  const totalPAs=entries.reduce((s,[,d])=>s+d.pas,0);
+  const summary=document.getElementById('linhaSummary');
+  if(summary)summary.textContent=entries.length+' linhas · '+Math.round(totalQty).toLocaleString('pt-BR')+' peças · '+totalPAs+' PAs';
   container.innerHTML=entries.map(([linha,d])=>`
     <div style="background:var(--s2);border:1px solid var(--border);padding:7px 10px;border-top:2px solid var(--accent2);overflow:hidden;min-width:0;">
       <div style="font-family:'JetBrains Mono',monospace;font-size:7px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${linha}">${linha}</div>
@@ -1162,9 +1220,22 @@ document.getElementById('xlsIn').addEventListener('change',function(e){
     const pi2=document.getElementById('progPeriodInfo');
     if(pi2)pi2.textContent=`${totalDays}d úteis disponíveis`;
 
-    // Set horizon to full if data spans more than a week
-    if(totalDays>5&&HORIZON==='week')setHorizon('full');
-    else applyHorizon();
+    // Load all data directly into queued (no horizon filtering)
+    queued={};
+    for(const item of PROG_DATA){
+      const mat=item.mat;
+      if(!queued[mat])queued[mat]={pa:item.pa,qty:0,ctMap:null,compMap:null};
+      else{queued[mat].qty+=item.qty;queued[mat].ctMap=null;queued[mat].compMap=null;}
+      queued[mat].qty+=item.qty - (queued[mat].qty===0?item.qty:0);
+    }
+    // Aggregate properly
+    queued={};
+    for(const item of PROG_DATA){
+      const mat=item.mat;
+      if(!queued[mat])queued[mat]={pa:item.pa,qty:item.qty,ctMap:null,compMap:null};
+      else queued[mat].qty+=item.qty;
+    }
+    updateProgCounter();renderProgGrid();renderPAList();
   };
   reader.readAsArrayBuffer(file);e.target.value='';
 });
@@ -1188,11 +1259,6 @@ function setupEvents(){
   document.getElementById('recalcBtn')?.addEventListener('click',()=>{calcAll().then(()=>{renderLinhaCards();renderConsol();});});
   document.getElementById('clearProg')?.addEventListener('click',()=>{queued={};updateProgCounter();renderProgGrid();renderPAList();});
   document.querySelectorAll('.stab').forEach(t=>t.addEventListener('click',()=>renderSector(t.dataset.sc)));
-  // Horizon buttons
-  document.querySelectorAll('.hz-btn').forEach(btn=>{
-    btn.addEventListener('click',()=>setHorizon(btn.dataset.h));
-  });
-
   document.addEventListener('click',e=>{
     const btn=e.target.closest('[data-rs]');if(!btn)return;
     rSectorFilter=btn.dataset.rs;
@@ -1291,21 +1357,27 @@ function renderParamsTable(){
           <th style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;padding:4px 8px;text-align:center;border-bottom:1px solid var(--border);width:60px">HC</th>
           <th style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;padding:4px 8px;text-align:center;border-bottom:1px solid var(--border);width:60px">Dias</th>
           <th style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;padding:4px 8px;text-align:right;border-bottom:1px solid var(--border);width:80px">Cap (h)</th>
+          <th style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;padding:4px 8px;border-bottom:1px solid var(--border);width:40px"></th>
         </tr></thead>
         <tbody>
           ${cts.map(ct=>{
             const s=defS(ct);
             const cap=(s.turnos*s.hturno*hDays*(s.efic/100)).toFixed(1);
             const hc=ctSets[ct]?.hc||1;
-            return`<tr class="params-row" style="border-bottom:1px solid var(--border);">
-              <td style="padding:5px 8px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent3)">${ct}</td>
+            const isCustom2=ctSets[ct]&&Object.keys(ctSets[ct]).some(k=>k!=='hc');
+            return`<tr class="params-row" style="border-bottom:1px solid var(--border);${isCustom2?'background:rgba(37,99,168,.04)':''}">
+              <td style="padding:5px 8px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent3)">${ct}
+                ${isCustom2?'<span style="font-family:JetBrains Mono,monospace;font-size:7px;color:var(--accent2);display:block">⚙ personalizado</span>':''}
+              </td>
               <td style="padding:5px 8px;font-size:10px;color:var(--text2)">${CT_NAMES[ct]||'—'}</td>
               <td style="padding:3px 4px;text-align:center"><input class="tci" type="number" min="1" max="3" value="${s.turnos}" data-ct="${ct}" data-f="turnos" onchange="updateParamCT(this)"></td>
               <td style="padding:3px 4px;text-align:center"><input class="tci" type="number" min="1" max="24" value="${s.hturno}" data-ct="${ct}" data-f="hturno" onchange="updateParamCT(this)"></td>
               <td style="padding:3px 4px;text-align:center"><input class="tci" type="number" min="1" max="100" value="${s.efic}" data-ct="${ct}" data-f="efic" onchange="updateParamCT(this)"></td>
               <td style="padding:3px 4px;text-align:center"><input class="tci" type="number" min="1" max="99" value="${hc}" data-ct="${ct}" data-f="hc" onchange="updateParamCT(this)"></td>
-              <td style="padding:5px 8px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3)">${hDays}</td>
+              <td style="padding:5px 8px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3)">${s.dias}</td>
               <td style="padding:5px 8px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent3)">${cap}</td>
+              <td style="padding:3px 6px">${isCustom2?`<button onclick="resetCT('${ct}')" style="padding:2px 7px;border:1px solid var(--border2);background:transparent;color:var(--text3);font-family:'JetBrains Mono',monospace;font-size:9px;cursor:pointer;" title="Restaurar padrão">↺</button>`:''}
+              </td>
             </tr>`;
           }).join('')}
         </tbody>
@@ -1325,18 +1397,22 @@ function getSectorCTParams(ct){
 
 function updateParamCT(inp){
   const ct=inp.dataset.ct,f=inp.dataset.f;
-  if(!ctSets[ct])ctSets[ct]={...defS(ct)};
+  if(!ctSets[ct])ctSets[ct]={};
   if(f==='hc')ctSets[ct].hc=parseFloat(inp.value)||1;
   else ctSets[ct][f]=parseFloat(inp.value)||1;
-  // Recalc cap display on same row
+  saveCtSets();
+  // Sync consolidado if open
+  if(document.getElementById('sConsol')?.classList.contains('on')){
+    renderSector(activeSector);renderExecPanel();
+  }
+  // Refresh params table cap column
   const row=inp.closest('tr');
   if(row){
     const s=defS(ct);
-    const cap=(s.turnos*s.hturno*getHorizonDays()*(s.efic/100)).toFixed(1);
-    const capCell=row.querySelector('td:last-child');
-    if(capCell)capCell.textContent=cap;
+    const cap=(s.turnos*s.hturno*s.dias*(s.efic/100)).toFixed(1);
+    const cells=row.querySelectorAll('td');
+    if(cells[7])cells[7].textContent=cap;
   }
-  saveCtSets();
 }
 
 function saveParams(){
@@ -1442,6 +1518,16 @@ function setGargaloFilter(f){
   } else {
     renderSector('mont');
   }
+}
+
+
+function toggleLinhaCards(){
+  const cards=document.getElementById('linhaCards');
+  const arrow=document.getElementById('linhaArrow');
+  if(!cards)return;
+  const isOpen=cards.classList.contains('expanded');
+  cards.classList.toggle('expanded',!isOpen);
+  if(arrow)arrow.classList.toggle('open',!isOpen);
 }
 
 
