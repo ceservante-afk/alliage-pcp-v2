@@ -30,6 +30,8 @@ body{background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;di
 .login-input:focus{border-color:var(--accent2);}
 .login-btn{background:var(--accent);border:none;color:#fff;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.1em;padding:9px;cursor:pointer;text-transform:uppercase;transition:background .15s;margin-top:4px;}
 .login-btn:hover{background:var(--accent2);}
+.login-btn-visitor{background:transparent;border:1px solid var(--border2);color:var(--text3);font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.08em;padding:7px;cursor:pointer;text-transform:uppercase;transition:all .15s;margin-top:2px;}
+.login-btn-visitor:hover{border-color:var(--text3);color:var(--text2);}
 .login-err{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--red);text-align:center;min-height:14px;}
 .profile-badge{font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 8px;border-radius:2px;font-weight:700;letter-spacing:.08em;cursor:pointer;}
 .profile-badge.admin{background:rgba(37,99,168,.2);border:1px solid var(--accent2);color:var(--accent3);}
@@ -259,11 +261,16 @@ table.ctt th{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--te
     <div class="login-logo">Alliage · PCP</div>
     <div class="login-title">Painel de Capacidade</div>
     <div class="login-field">
-      <div class="login-label">Senha de acesso</div>
+      <div class="login-label">Usuário</div>
+      <input class="login-input" type="text" id="loginUser" placeholder="usuário" autocomplete="username">
+    </div>
+    <div class="login-field">
+      <div class="login-label">Senha</div>
       <input class="login-input" type="password" id="loginPwd" placeholder="••••••••" autocomplete="current-password">
     </div>
     <div class="login-err" id="loginErr"></div>
     <button class="login-btn" onclick="doLogin()">Entrar</button>
+    <button class="login-btn-visitor" onclick="doLoginVisitor()">Entrar como Visitante</button>
   </div>
 </div>
 
@@ -444,73 +451,85 @@ let rActiveCT=null, rSortCol='indir', rSortAsc=false, rSectorFilter='ALL';
 let paramTab='fab'; // 'fab' | 'mont'
 
 // ── PERFIS ────────────────────────────────────────────────────────────
-// Senhas simples — segurança por obscuridade (opção A, uso interno)
-const PROFILES={
-  'alliage2025':  {role:'admin',   label:'ADMIN'},
-  'visitante':    {role:'visitor', label:'VISITANTE'},
+// Credenciais admin — uso interno (opção A, sem segurança server-side)
+const USERS={
+  'carlos':  {pwd:'alliage2025', role:'admin',   label:'ADMIN'},
+  'admin':   {pwd:'alliage2025', role:'admin',   label:'ADMIN'},
 };
-let currentRole=''; // '' | 'admin' | 'visitor'
+let currentRole='';
+let currentUser='';
 
 function isAdmin(){return currentRole==='admin';}
 
-function doLogin(){
-  const pwd=document.getElementById('loginPwd').value.trim();
-  const profile=PROFILES[pwd];
-  if(!profile){
-    const err=document.getElementById('loginErr');
-    err.textContent='Senha incorreta.';
-    setTimeout(()=>err.textContent='',2000);
-    return;
-  }
-  currentRole=profile.role;
-  sessionStorage.setItem('pcp_role',currentRole);
+function applyLogin(role, user, label){
+  currentRole=role;
+  currentUser=user;
+  sessionStorage.setItem('pcp_role', role);
+  sessionStorage.setItem('pcp_user', user);
   document.getElementById('loginScreen').style.display='none';
   const badge=document.getElementById('profileBadge');
-  badge.textContent=profile.label;
+  badge.textContent=label+(user&&role==='admin'?' · '+user.toUpperCase():'');
   badge.className='profile-badge '+(isAdmin()?'admin':'visitor');
   applyRoleRestrictions();
   init();
 }
 
+function doLogin(){
+  const user=document.getElementById('loginUser').value.trim().toLowerCase();
+  const pwd=document.getElementById('loginPwd').value;
+  const err=document.getElementById('loginErr');
+  const profile=USERS[user];
+  if(!profile||profile.pwd!==pwd){
+    err.textContent='Usuário ou senha incorretos.';
+    setTimeout(()=>err.textContent='',2500);
+    document.getElementById('loginPwd').value='';
+    return;
+  }
+  applyLogin(profile.role, user, profile.label);
+}
+
+function doLoginVisitor(){
+  applyLogin('visitor','','VISITANTE');
+}
+
 function doLogout(){
   if(!confirm('Sair?'))return;
   sessionStorage.removeItem('pcp_role');
-  currentRole='';
+  sessionStorage.removeItem('pcp_user');
+  currentRole='';currentUser='';
   document.getElementById('loginScreen').style.display='flex';
+  document.getElementById('loginUser').value='';
   document.getElementById('loginPwd').value='';
+  setTimeout(()=>document.getElementById('loginUser')?.focus(),100);
 }
 
 function applyRoleRestrictions(){
   if(isAdmin())return;
-  // Visitor: hide import, calc, clear buttons; hide params save/reset
   const hide=ids=>ids.forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none';});
-  hide(['xlsIn','calcAll','clearProg','paramsSaveBtn','paramsResetBtn']);
-  // Hide the label wrapping xlsIn
+  hide(['calcAll','clearProg','paramsSaveBtn','paramsResetBtn']);
   document.querySelectorAll('.xls-btn').forEach(el=>el.style.display='none');
-  // Disable param inputs via CSS
   const style=document.createElement('style');
   style.textContent='.tci{pointer-events:none;opacity:.5;} .ct-edit-btn{display:none!important;}';
   document.head.appendChild(style);
 }
 
 function checkAutoLogin(){
-  const saved=sessionStorage.getItem('pcp_role');
-  if(saved&&PROFILES[Object.keys(PROFILES).find(k=>PROFILES[k].role===saved)||'']||
-     ['admin','visitor'].includes(saved)){
-    currentRole=saved;
+  const savedRole=sessionStorage.getItem('pcp_role');
+  const savedUser=sessionStorage.getItem('pcp_user')||'';
+  if(['admin','visitor'].includes(savedRole)){
+    const label=savedRole==='admin'?'ADMIN':'VISITANTE';
+    currentRole=savedRole;currentUser=savedUser;
     document.getElementById('loginScreen').style.display='none';
-    const label=saved==='admin'?'ADMIN':'VISITANTE';
     const badge=document.getElementById('profileBadge');
-    badge.textContent=label;
+    badge.textContent=label+(savedUser&&savedRole==='admin'?' · '+savedUser.toUpperCase():'');
     badge.className='profile-badge '+(isAdmin()?'admin':'visitor');
     applyRoleRestrictions();
     init();
     return true;
   }
-  // Focus password field
-  setTimeout(()=>document.getElementById('loginPwd')?.focus(),100);
-  // Allow Enter key
+  setTimeout(()=>document.getElementById('loginUser')?.focus(),100);
   document.getElementById('loginPwd')?.addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+  document.getElementById('loginUser')?.addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('loginPwd')?.focus();});
   return false;
 }
 
