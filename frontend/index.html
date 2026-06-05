@@ -108,9 +108,9 @@ body{background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;di
 .consol-bottom{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;}
 
 /* CT TABLE */
-table.ctt{width:100%;border-collapse:collapse;}
-table.ctt th{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;padding:5px 10px;border-bottom:1px solid var(--border);text-align:left;position:sticky;top:0;background:var(--s1);z-index:1;}
-.ct-main-tr td{padding:7px 10px;border-bottom:1px solid var(--border);vertical-align:middle;}
+table.ctt{width:100%;border-collapse:collapse;table-layout:fixed;}
+table.ctt th{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;padding:5px 10px;border-bottom:1px solid var(--border);text-align:left;position:sticky;top:0;background:var(--s1);z-index:1;overflow:hidden;white-space:nowrap;}
+.ct-main-tr td{padding:7px 10px;border-bottom:1px solid var(--border);vertical-align:middle;overflow:hidden;}
 .ct-main-tr:hover td{background:rgba(37,99,168,.04);}
 .ct-name{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;}
 .ct-load-val{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent3);}
@@ -744,7 +744,7 @@ function renderSector(sector){
   const maxLoad=entries[0]?.[1]||1;
   const scroll=document.createElement('div');scroll.className='ct-scroll';
   const tbl=document.createElement('table');tbl.className='ctt';
-  tbl.innerHTML=`<thead><tr><th>CT</th><th>Carga</th><th>Cap.</th><th style="width:44px;text-align:center">Turnos</th><th style="width:54px;text-align:center">H/Turno</th><th style="width:44px;text-align:center">Dias</th><th style="width:52px;text-align:center">Efic %</th><th style="width:48px">%</th><th style="width:90px">Barra</th><th style="width:62px">Status</th><th style="width:70px;text-align:right">Ações</th></tr></thead>`;
+  tbl.innerHTML=`<colgroup><col style="width:220px"><col style="width:90px"><col style="width:80px"><col style="width:60px"><col style="width:68px"><col style="width:52px"><col style="width:62px"><col style="width:72px"><col style="width:100px"><col style="width:72px"><col style="width:84px"></colgroup><thead><tr><th>CT</th><th>Carga</th><th>Cap.</th><th style="text-align:center">Turnos</th><th style="text-align:center">H/Turno</th><th style="text-align:center">Dias</th><th style="text-align:center">Efic %</th><th>%</th><th>Ocupação</th><th>Status</th><th style="text-align:right">Ações</th></tr></thead>`;
   const tbody=document.createElement('tbody');
   buildCTRows(entries,tbody,maxLoad,'#9d84f5','mont');
   tbl.appendChild(tbody);scroll.appendChild(tbl);body.appendChild(scroll);
@@ -766,21 +766,21 @@ function buildCTRows(entries,tbody,maxLoad,ctColor,sectorClass){
     const isCustom=ctSets[ct]&&Object.keys(ctSets[ct]).some(k=>k!=='_editing');
     const tr=document.createElement('tr');tr.className=rowClass;
     tr.innerHTML=`
-      <td><div class="ct-name" style="color:${rowColor}">${ct}</div>
-          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-top:1px">${name}</div>
+      <td><div class="ct-name" style="color:${rowColor};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${ct}</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</div>
           ${isCustom?'<span class="ct-custom-badge">⚙ personalizado</span>':''}</td>
       <td class="ct-load-val">${fmtH(load)}</td>
       <td class="ct-cap-val">${fmtH(cap)}</td>
-      <td style="padding:5px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center" data-field="turnos">${s.turnos}</td>
-      <td style="padding:5px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center" data-field="hturno">${s.hturno}</td>
-      <td style="padding:5px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center" data-field="dias">${s.dias}</td>
-      <td style="padding:5px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center" data-field="efic">${s.efic}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center" data-field="turnos">${s.turnos}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center" data-field="hturno">${s.hturno}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center" data-field="dias">${s.dias}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center" data-field="efic">${s.efic}</td>
       <td class="ct-pct" style="color:${col}">${pct}%
         ${excessStr?`<span class="excess-badge">${excessStr} acima</span>`:''}
       </td>
       <td><div class="ct-bar-bg"><div class="ct-bar-fill" style="width:${bw}%;background:${col}"></div></div></td>
       <td class="ct-status" style="color:${col}">${semTxt(pct)}</td>
-      <td style="padding:4px 6px;white-space:nowrap;text-align:right">
+      <td style="white-space:nowrap;text-align:right">
         <span class="det-open" style="cursor:pointer;color:var(--text3);font-size:11px;margin-right:4px" data-ct="${ct}">▶</span>
         <button class="ct-edit-btn" data-ct="${ct}" onclick="inlineEditCT('${ct}',this)" title="Editar parâmetros"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
         ${isCustom?`<button class="ct-edit-btn" data-ct="${ct}" onclick="resetCT('${ct}')" title="Restaurar padrão" style="margin-left:2px">↺</button>`:''}
@@ -847,7 +847,7 @@ function renderFabSectorCards(){
   const body=document.getElementById('sectorBody');body.innerHTML='';
   const oldDet=document.getElementById('detPanel');if(oldDet)oldDet.remove();selectedCT=null;
   const lc=document.getElementById('linhaCards');
-  if(lc){const wasExpanded=lc.classList.contains('expanded');lc.style.removeProperty('display');if(!wasExpanded)lc.classList.add('expanded');const arr=document.getElementById('linhaArrow');if(arr)arr.classList.add('open');}
+  if(lc){lc.style.removeProperty('display');lc.classList.add('expanded');const arr=document.getElementById('linhaArrow');if(arr)arr.classList.add('open');}
   const st=document.querySelector('.sector-tabs');if(st)st.style.display='';
 
   const totals={};FAB_SECTORS.forEach(s=>totals[s.key]={load:0,cap:0});
@@ -936,7 +936,7 @@ function renderFabSectorDetail(sectorKey,filterStatus='ALL',searchTerm=''){
 
   const scroll=document.createElement('div');scroll.className='ct-scroll';
   const tbl=document.createElement('table');tbl.className='ctt';tbl.style.width='100%';
-  tbl.innerHTML=`<thead><tr><th>CT</th><th>Carga</th><th>Cap.</th><th style="width:54px;text-align:center">Turnos</th><th style="width:64px;text-align:center">H/Turno</th><th style="width:54px;text-align:center">Dias</th><th style="width:62px;text-align:center">Efic %</th><th style="width:58px">%</th><th style="min-width:100px">Ocupação</th><th style="width:72px">Status</th><th style="width:70px;text-align:right">Ações</th></tr></thead>`;
+  tbl.innerHTML=`<colgroup><col style="width:220px"><col style="width:90px"><col style="width:80px"><col style="width:60px"><col style="width:68px"><col style="width:52px"><col style="width:62px"><col style="width:72px"><col style="width:100px"><col style="width:72px"><col style="width:84px"></colgroup><thead><tr><th>CT</th><th>Carga</th><th>Cap.</th><th style="text-align:center">Turnos</th><th style="text-align:center">H/Turno</th><th style="text-align:center">Dias</th><th style="text-align:center">Efic %</th><th>%</th><th>Ocupação</th><th>Status</th><th style="text-align:right">Ações</th></tr></thead>`;
   const tbody=document.createElement('tbody');
   entries.forEach(([ct,load])=>{
     const s=defS(ct),cap=capMin(ct),pct=cap>0?Math.round(load/cap*100):0;
@@ -944,17 +944,17 @@ function renderFabSectorDetail(sectorKey,filterStatus='ALL',searchTerm=''){
     const isCustom=ctSets[ct]&&Object.keys(ctSets[ct]).some(k=>k!=='hc');
     const tr=document.createElement('tr');tr.className='ct-main-tr';tr.style.borderBottom='1px solid var(--border2)';
     tr.innerHTML=`
-      <td style="padding:10px 12px"><div class="ct-name" style="color:var(--accent3)">${ct}</div><div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-top:2px">${CT_NAMES[ct]||''}</div></td>
-      <td style="padding:10px 12px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent3);font-weight:700">${fmtH(load)}</td>
-      <td style="padding:10px 12px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3)">${fmtH(cap)}</td>
-      <td style="padding:8px 6px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center" data-field="turnos">${s.turnos}</td>
-      <td style="padding:8px 6px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center" data-field="hturno">${s.hturno}</td>
-      <td style="padding:8px 6px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center" data-field="dias">${s.dias}</td>
-      <td style="padding:8px 6px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center" data-field="efic">${s.efic}</td>
-      <td style="padding:10px 8px;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:800;color:${col}">${pct}%</td>
-      <td style="padding:10px 12px"><div style="height:8px;background:var(--s4);border-radius:4px;overflow:hidden;min-width:60px"><div style="height:100%;width:${bw}%;background:${col};border-radius:4px"></div></div></td>
-      <td style="padding:10px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:${col}">${semTxt(pct)}</td>
-      <td style="padding:6px 8px;text-align:right;white-space:nowrap">
+      <td><div class="ct-name" style="color:var(--accent3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${ct}</div><div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${CT_NAMES[ct]||''}</div></td>
+      <td class="ct-load-val">${fmtH(load)}</td>
+      <td class="ct-cap-val">${fmtH(cap)}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center" data-field="turnos">${s.turnos}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center" data-field="hturno">${s.hturno}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center" data-field="dias">${s.dias}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center" data-field="efic">${s.efic}</td>
+      <td class="ct-pct" style="color:${col}">${pct}%</td>
+      <td><div class="ct-bar-bg" style="width:100%"><div class="ct-bar-fill" style="width:${bw}%;background:${col};border-radius:4px"></div></div></td>
+      <td class="ct-status" style="color:${col}">${semTxt(pct)}</td>
+      <td style="white-space:nowrap;text-align:right">
         <span class="det-open" style="cursor:pointer;color:var(--text3);font-size:13px;margin-right:6px" data-ct="${ct}">▶</span>
         <button class="ct-edit-btn" data-ct="${ct}" onclick="inlineEditCT('${ct}',this)" title="Editar parâmetros"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
         ${isCustom?`<button class="ct-edit-btn" data-ct="${ct}" onclick="resetCT('${ct}')" title="Restaurar padrão" style="margin-left:2px">↺</button>`:''}
@@ -1053,10 +1053,11 @@ function renderLinhaCards(){
     toggle.addEventListener('click',toggleLinhaCards);
     // Create cards container
     container=document.createElement('div');container.id='linhaCards';
-    container.classList.add('expanded');
-    const arrow=document.getElementById('linhaArrow');if(arrow)arrow.classList.add('open');
     const st=document.querySelector('.sector-tabs')||document.querySelector('.consol-bottom');
     if(st){st.parentNode.insertBefore(container,st);st.parentNode.insertBefore(toggle,container);}
+    // NOW elements are in DOM — safe to access by ID
+    container.classList.add('expanded');
+    const arr=document.getElementById('linhaArrow');if(arr)arr.classList.add('open');
   }
   if(!entries.length){container.style.maxHeight='0';container.classList.remove('expanded');return;}
   container.style.removeProperty('display');
