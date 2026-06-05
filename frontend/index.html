@@ -950,14 +950,18 @@ function renderFabSectorDetail(sectorKey,filterStatus='ALL',searchTerm=''){
       <td style="padding:10px 12px"><div class="ct-name" style="color:var(--accent3)">${ct}</div><div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-top:2px">${CT_NAMES[ct]||''}</div></td>
       <td style="padding:10px 12px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent3);font-weight:700">${fmtH(load)}</td>
       <td style="padding:10px 12px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3)">${fmtH(cap)}</td>
-      <td style="padding:6px 4px"><input class="tci" type="number" min="1" max="3" value="${s.turnos}" data-ct="${ct}" data-f="turnos"></td>
-      <td style="padding:6px 4px"><input class="tci" type="number" min="1" max="12" value="${s.hturno}" data-ct="${ct}" data-f="hturno"></td>
-      <td style="padding:6px 4px"><input class="tci" type="number" min="1" max="31" value="${s.dias}" data-ct="${ct}" data-f="dias"></td>
-      <td style="padding:6px 4px"><input class="tci" type="number" min="1" max="100" value="${s.efic}" data-ct="${ct}" data-f="efic"></td>
+      <td style="padding:8px 6px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center" data-field="turnos">${s.turnos}</td>
+      <td style="padding:8px 6px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center" data-field="hturno">${s.hturno}</td>
+      <td style="padding:8px 6px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center" data-field="dias">${s.dias}</td>
+      <td style="padding:8px 6px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center" data-field="efic">${s.efic}</td>
       <td style="padding:10px 8px;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:800;color:${col}">${pct}%</td>
       <td style="padding:10px 12px"><div style="height:8px;background:var(--s4);border-radius:4px;overflow:hidden;min-width:60px"><div style="height:100%;width:${bw}%;background:${col};border-radius:4px"></div></div></td>
       <td style="padding:10px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:${col}">${semTxt(pct)}</td>
-      <td style="padding:10px 6px;cursor:pointer;color:var(--text3);font-size:13px;text-align:center" class="det-open" data-ct="${ct}">▶</td>`;
+      <td style="padding:6px 8px;text-align:right;white-space:nowrap">
+        <span class="det-open" style="cursor:pointer;color:var(--text3);font-size:13px;margin-right:6px" data-ct="${ct}">▶</span>
+        <button class="ct-edit-btn" data-ct="${ct}" onclick="inlineEditCT('${ct}',this)">✏</button>
+        ${isCustom?`<button class="ct-edit-btn" data-ct="${ct}" onclick="resetCT('${ct}')" title="Restaurar padrão" style="margin-left:2px">↺</button>`:''}
+      </td>`;
     tr.querySelectorAll('.tci').forEach(inp=>inp.addEventListener('change',e=>{
       e.stopPropagation();const c=e.target.dataset.ct,f=e.target.dataset.f;
       if(!ctSets[c])ctSets[c]={...defS(c)};ctSets[c][f]=parseFloat(e.target.value)||1;
@@ -1571,4 +1575,3 @@ init();
 </div>
 </body>
 </html>
-
