@@ -243,7 +243,7 @@ table.ctt th{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--te
 
 <div class="topbar">
   <div class="logo">PAINEL DE CONTROLE DE CAPACIDADE</div>
-  <span id="progPeriodInfo" style="display:none"></span>
+  <span id="progPeriodInfo" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-left:16px;display:none"></span>
   <div class="tbar-stats">
     <div class="tstat"><span class="sysdot"></span>ONLINE</div>
     <div class="tstat">PAs: <b id="sPAs">—</b></div>
@@ -502,6 +502,39 @@ function defS(ct){return{turnos:ctSets[ct]?.turnos??1,hturno:ctSets[ct]?.hturno?
 function capMin(ct){const s=defS(ct);return s.turnos*s.hturno*s.dias*(s.efic/100)*60;}
 function saveCtSets(){try{localStorage.setItem('pcp_cts_v2',JSON.stringify(ctSets));}catch(e){}}
 
+function saveProgData(){
+  try{
+    const serial=PROG_DATA.map(x=>({...x,date:x.date.toISOString()}));
+    localStorage.setItem('pcp_prog_v2',JSON.stringify({data:serial,min:PROG_DATE_MIN?.toISOString(),max:PROG_DATE_MAX?.toISOString(),savedAt:new Date().toISOString()}));
+  }catch(e){console.warn('saveProgData error',e);}
+}
+
+function loadProgData(){
+  try{
+    const raw=localStorage.getItem('pcp_prog_v2');
+    if(!raw)return false;
+    const obj=JSON.parse(raw);
+    PROG_DATA=obj.data.map(x=>({...x,date:new Date(x.date)}));
+    PROG_DATE_MIN=obj.min?new Date(obj.min):null;
+    PROG_DATE_MAX=obj.max?new Date(obj.max):null;
+    // Rebuild queued
+    queued={};
+    for(const item of PROG_DATA){
+      const mat=item.mat;
+      if(!queued[mat])queued[mat]={pa:item.pa,qty:item.qty,ctMap:null,compMap:null};
+      else queued[mat].qty+=item.qty;
+    }
+    // Show saved timestamp in topbar
+    if(obj.savedAt){
+      const d=new Date(obj.savedAt);
+      const lbl=d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})+' '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+      const pi2=document.getElementById('progPeriodInfo');
+      if(pi2){pi2.style.display='';pi2.textContent='prog salva '+lbl;}
+    }
+    return true;
+  }catch(e){console.warn('loadProgData error',e);return false;}
+}
+
 function updateProgCounter(){
   const pas=Object.keys(queued).length;
   const pcs=Object.values(queued).reduce((s,{qty})=>s+qty,0);
@@ -546,6 +579,14 @@ async function init(){
 
   filtered=ALL_PAS;
   renderPAList();
+
+  // Restore last saved programação
+  if(loadProgData()){
+    updateProgCounter();
+    renderProgGrid();
+    renderPAList();
+  }
+
   setupEvents();
 }
 
@@ -1238,7 +1279,7 @@ document.getElementById('xlsIn').addEventListener('change',function(e){
 
     // Show period info
     const pi2=document.getElementById('progPeriodInfo');
-    if(pi2)pi2.textContent=`${totalDays}d úteis disponíveis`;
+    if(pi2){const n=new Date();const lbl=n.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})+' '+n.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});pi2.style.display='';pi2.textContent='prog salva '+lbl;}
 
     // Load all data directly into queued (no horizon filtering)
     queued={};
@@ -1255,6 +1296,7 @@ document.getElementById('xlsIn').addEventListener('change',function(e){
       if(!queued[mat])queued[mat]={pa:item.pa,qty:item.qty,ctMap:null,compMap:null};
       else queued[mat].qty+=item.qty;
     }
+    saveProgData();
     updateProgCounter();renderProgGrid();renderPAList();
   };
   reader.readAsArrayBuffer(file);e.target.value='';
@@ -1383,17 +1425,28 @@ function renderParamsTable(){
     if(!cts.length)continue;
     html+=`<div style="margin-bottom:18px;">
       <div style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;color:var(--accent3);letter-spacing:.14em;text-transform:uppercase;padding:6px 0;border-bottom:1px solid var(--border);margin-bottom:6px;">${sec.label}</div>
-      <table style="width:100%;border-collapse:collapse;">
+      <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
+        <colgroup>
+          <col style="width:110px">
+          <col>
+          <col style="width:70px">
+          <col style="width:78px">
+          <col style="width:68px">
+          <col style="width:58px">
+          <col style="width:62px">
+          <col style="width:78px">
+          <col style="width:44px">
+        </colgroup>
         <thead><tr>
           <th style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;padding:4px 8px;text-align:left;border-bottom:1px solid var(--border);">CT</th>
           <th style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;padding:4px 8px;text-align:left;border-bottom:1px solid var(--border);">Nome</th>
-          <th style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;padding:4px 8px;text-align:center;border-bottom:1px solid var(--border);width:70px">Turnos</th>
-          <th style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;padding:4px 8px;text-align:center;border-bottom:1px solid var(--border);width:80px">H/Turno</th>
-          <th style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;padding:4px 8px;text-align:center;border-bottom:1px solid var(--border);width:70px">Efic %</th>
-          <th style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;padding:4px 8px;text-align:center;border-bottom:1px solid var(--border);width:60px">HC</th>
-          <th style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;padding:4px 8px;text-align:center;border-bottom:1px solid var(--border);width:60px">Dias</th>
-          <th style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;padding:4px 8px;text-align:right;border-bottom:1px solid var(--border);width:80px">Cap (h)</th>
-          <th style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;padding:4px 8px;border-bottom:1px solid var(--border);width:40px"></th>
+          <th style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;padding:4px 8px;text-align:center;border-bottom:1px solid var(--border);">Turnos</th>
+          <th style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;padding:4px 8px;text-align:center;border-bottom:1px solid var(--border);">H/Turno</th>
+          <th style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;padding:4px 8px;text-align:center;border-bottom:1px solid var(--border);">Efic %</th>
+          <th style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;padding:4px 8px;text-align:center;border-bottom:1px solid var(--border);">HC</th>
+          <th style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;padding:4px 8px;text-align:center;border-bottom:1px solid var(--border);">Dias</th>
+          <th style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;padding:4px 8px;text-align:right;border-bottom:1px solid var(--border);">Cap (h)</th>
+          <th style="border-bottom:1px solid var(--border);"></th>
         </tr></thead>
         <tbody>
           ${cts.map(ct=>{
@@ -1402,17 +1455,17 @@ function renderParamsTable(){
             const hc=ctSets[ct]?.hc||1;
             const isCustom2=ctSets[ct]&&Object.keys(ctSets[ct]).some(k=>k!=='hc');
             return`<tr class="params-row" style="border-bottom:1px solid var(--border);${isCustom2?'background:rgba(37,99,168,.04)':''}">
-              <td style="padding:5px 8px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent3)">${ct}
+              <td style="padding:5px 8px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ct}
                 ${isCustom2?'<span style="font-family:JetBrains Mono,monospace;font-size:7px;color:var(--accent2);display:block">⚙ personalizado</span>':''}
               </td>
-              <td style="padding:5px 8px;font-size:10px;color:var(--text2)">${CT_NAMES[ct]||'—'}</td>
+              <td style="padding:5px 8px;font-size:10px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${CT_NAMES[ct]||'—'}</td>
               <td style="padding:3px 4px;text-align:center"><input class="tci" type="number" min="1" max="3" value="${s.turnos}" data-ct="${ct}" data-f="turnos" onchange="updateParamCT(this)"></td>
               <td style="padding:3px 4px;text-align:center"><input class="tci" type="number" min="1" max="24" value="${s.hturno}" data-ct="${ct}" data-f="hturno" onchange="updateParamCT(this)"></td>
               <td style="padding:3px 4px;text-align:center"><input class="tci" type="number" min="1" max="100" value="${s.efic}" data-ct="${ct}" data-f="efic" onchange="updateParamCT(this)"></td>
               <td style="padding:3px 4px;text-align:center"><input class="tci" type="number" min="1" max="99" value="${hc}" data-ct="${ct}" data-f="hc" onchange="updateParamCT(this)"></td>
               <td style="padding:3px 4px;text-align:center"><input class="tci" type="number" min="1" max="31" value="${s.dias}" data-ct="${ct}" data-f="dias" onchange="updateParamCT(this)"></td>
               <td data-cap style="padding:5px 8px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent3)">${cap}</td>
-              <td style="padding:3px 6px">${isCustom2?`<button onclick="resetCT('${ct}')" style="padding:2px 7px;border:1px solid var(--border2);background:transparent;color:var(--text3);font-family:'JetBrains Mono',monospace;font-size:9px;cursor:pointer;" title="Restaurar padrão">↺</button>`:''}
+              <td style="padding:3px 6px;text-align:center">${isCustom2?`<button onclick="resetCT('${ct}')" style="padding:2px 7px;border:1px solid var(--border2);background:transparent;color:var(--text3);font-family:'JetBrains Mono',monospace;font-size:9px;cursor:pointer;" title="Restaurar padrão">↺</button>`:''}
               </td>
             </tr>`;
           }).join('')}
