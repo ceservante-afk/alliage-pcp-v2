@@ -19,7 +19,22 @@
 html,body{height:100%;overflow:hidden;}
 body{background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;display:flex;flex-direction:column;}
 
-.lbar{position:fixed;top:0;left:0;height:2px;background:var(--accent2);z-index:999;transition:width .3s;}
+/* LOGIN */
+#loginScreen{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:0;}
+.login-box{background:var(--s1);border:1px solid var(--border2);padding:36px 40px;width:320px;display:flex;flex-direction:column;gap:16px;}
+.login-logo{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.22em;color:var(--text3);text-transform:uppercase;margin-bottom:4px;}
+.login-title{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;letter-spacing:.12em;color:var(--text2);text-transform:uppercase;}
+.login-field{display:flex;flex-direction:column;gap:5px;}
+.login-label{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;}
+.login-input{background:var(--bg);border:1px solid var(--border2);padding:8px 10px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text);outline:none;width:100%;transition:border-color .15s;}
+.login-input:focus{border-color:var(--accent2);}
+.login-btn{background:var(--accent);border:none;color:#fff;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.1em;padding:9px;cursor:pointer;text-transform:uppercase;transition:background .15s;margin-top:4px;}
+.login-btn:hover{background:var(--accent2);}
+.login-err{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--red);text-align:center;min-height:14px;}
+.profile-badge{font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 8px;border-radius:2px;font-weight:700;letter-spacing:.08em;cursor:pointer;}
+.profile-badge.admin{background:rgba(37,99,168,.2);border:1px solid var(--accent2);color:var(--accent3);}
+.profile-badge.visitor{background:rgba(74,106,130,.1);border:1px solid var(--border2);color:var(--text3);}
+.visitor-overlay{position:fixed;inset:0;z-index:0;pointer-events:none;}/* just a tag, real blocking via JS */
 
 /* TOPBAR */
 .topbar{height:42px;background:var(--s1);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:16px;flex-shrink:0;}
@@ -239,6 +254,19 @@ table.ctt th{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--te
 </style>
 </head>
 <body>
+<div id="loginScreen">
+  <div class="login-box">
+    <div class="login-logo">Alliage · PCP</div>
+    <div class="login-title">Painel de Capacidade</div>
+    <div class="login-field">
+      <div class="login-label">Senha de acesso</div>
+      <input class="login-input" type="password" id="loginPwd" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <div class="login-err" id="loginErr"></div>
+    <button class="login-btn" onclick="doLogin()">Entrar</button>
+  </div>
+</div>
+
 <div class="lbar" id="lbar" style="width:0"></div>
 
 <div class="topbar">
@@ -249,6 +277,7 @@ table.ctt th{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--te
     <div class="tstat">PAs: <b id="sPAs">—</b></div>
     <div class="tstat">Roteiros: <b id="sRot">—</b></div>
     <div class="tstat" style="display:none"><b id="sProgN">0</b></div>
+    <span id="profileBadge" class="profile-badge" onclick="doLogout()" title="Clique para sair"></span>
   </div>
 </div>
 
@@ -413,6 +442,77 @@ let globalCTMap={}, globalCompMap={};
 let activeSector='fab', activeFabSector=null, selectedCT=null;
 let rActiveCT=null, rSortCol='indir', rSortAsc=false, rSectorFilter='ALL';
 let paramTab='fab'; // 'fab' | 'mont'
+
+// ── PERFIS ────────────────────────────────────────────────────────────
+// Senhas simples — segurança por obscuridade (opção A, uso interno)
+const PROFILES={
+  'alliage2025':  {role:'admin',   label:'ADMIN'},
+  'visitante':    {role:'visitor', label:'VISITANTE'},
+};
+let currentRole=''; // '' | 'admin' | 'visitor'
+
+function isAdmin(){return currentRole==='admin';}
+
+function doLogin(){
+  const pwd=document.getElementById('loginPwd').value.trim();
+  const profile=PROFILES[pwd];
+  if(!profile){
+    const err=document.getElementById('loginErr');
+    err.textContent='Senha incorreta.';
+    setTimeout(()=>err.textContent='',2000);
+    return;
+  }
+  currentRole=profile.role;
+  sessionStorage.setItem('pcp_role',currentRole);
+  document.getElementById('loginScreen').style.display='none';
+  const badge=document.getElementById('profileBadge');
+  badge.textContent=profile.label;
+  badge.className='profile-badge '+(isAdmin()?'admin':'visitor');
+  applyRoleRestrictions();
+  init();
+}
+
+function doLogout(){
+  if(!confirm('Sair?'))return;
+  sessionStorage.removeItem('pcp_role');
+  currentRole='';
+  document.getElementById('loginScreen').style.display='flex';
+  document.getElementById('loginPwd').value='';
+}
+
+function applyRoleRestrictions(){
+  if(isAdmin())return;
+  // Visitor: hide import, calc, clear buttons; hide params save/reset
+  const hide=ids=>ids.forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none';});
+  hide(['xlsIn','calcAll','clearProg','paramsSaveBtn','paramsResetBtn']);
+  // Hide the label wrapping xlsIn
+  document.querySelectorAll('.xls-btn').forEach(el=>el.style.display='none');
+  // Disable param inputs via CSS
+  const style=document.createElement('style');
+  style.textContent='.tci{pointer-events:none;opacity:.5;} .ct-edit-btn{display:none!important;}';
+  document.head.appendChild(style);
+}
+
+function checkAutoLogin(){
+  const saved=sessionStorage.getItem('pcp_role');
+  if(saved&&PROFILES[Object.keys(PROFILES).find(k=>PROFILES[k].role===saved)||'']||
+     ['admin','visitor'].includes(saved)){
+    currentRole=saved;
+    document.getElementById('loginScreen').style.display='none';
+    const label=saved==='admin'?'ADMIN':'VISITANTE';
+    const badge=document.getElementById('profileBadge');
+    badge.textContent=label;
+    badge.className='profile-badge '+(isAdmin()?'admin':'visitor');
+    applyRoleRestrictions();
+    init();
+    return true;
+  }
+  // Focus password field
+  setTimeout(()=>document.getElementById('loginPwd')?.focus(),100);
+  // Allow Enter key
+  document.getElementById('loginPwd')?.addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+  return false;
+}
 
 // ── HORIZON STATE ─────────────────────────────────────────────────────
 let PROG_DATA=[];   // full imported program: [{mat, qty, date, pa}]
@@ -833,6 +933,7 @@ function buildCTRows(entries,tbody,maxLoad,ctColor,sectorClass){
 }
 
 function inlineEditCT(ct,btn){
+  if(!isAdmin())return;
   const row=btn.closest('tr');
   const isEditing=row.classList.contains('ct-editing');
 
@@ -874,6 +975,7 @@ function inlineEditCT(ct,btn){
 }
 
 function resetCT(ct){
+  if(!isAdmin())return;
   if(!confirm('Restaurar padrão para '+ct+'?'))return;
   delete ctSets[ct];
   saveCtSets();
@@ -1505,12 +1607,14 @@ function updateParamCT(inp){
 }
 
 function saveParams(){
+  if(!isAdmin())return;
   saveCtSets();
   const btn=event?.target;
   if(btn){const orig=btn.textContent;btn.textContent='✓ Salvo!';setTimeout(()=>btn.textContent=orig,1500);}
 }
 
 function resetParams(){
+  if(!isAdmin())return;
   if(!confirm('Resetar todos os parâmetros para padrão?'))return;
   ctSets={};saveCtSets();renderParamsTable();
 }
@@ -1620,7 +1724,7 @@ function toggleLinhaCards(){
 }
 
 
-init();
+checkAutoLogin();
 </script>
 
 
@@ -1629,8 +1733,8 @@ init();
   <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;background:var(--bg);">
     <div style="padding:10px 20px;border-bottom:1px solid var(--border);background:var(--s1);display:flex;align-items:center;gap:14px;flex-shrink:0;">
       <div style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.12em;color:var(--text2)">PARÂMETROS — HC / EFICIÊNCIA / HORAS</div>
-      <button onclick="saveParams()" style="margin-left:auto;padding:4px 14px;border:1px solid var(--accent);background:rgba(37,99,168,.15);color:var(--accent3);font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;cursor:pointer;">✓ Salvar</button>
-      <button onclick="resetParams()" style="padding:4px 10px;border:1px solid var(--border2);background:transparent;color:var(--text3);font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer;">↺ Resetar</button>
+      <button id="paramsSaveBtn" onclick="saveParams()" style="margin-left:auto;padding:4px 14px;border:1px solid var(--accent);background:rgba(37,99,168,.15);color:var(--accent3);font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;cursor:pointer;">✓ Salvar</button>
+      <button id="paramsResetBtn" onclick="resetParams()" style="padding:4px 10px;border:1px solid var(--border2);background:transparent;color:var(--text3);font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer;">↺ Resetar</button>
     </div>
     <div style="display:flex;background:var(--s1);border-bottom:1px solid var(--border);padding:0 20px;flex-shrink:0;">
       <button id="paramTabFab" onclick="switchParamTab('fab')" style="padding:7px 16px;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;border:none;border-bottom:2px solid var(--accent2);background:transparent;color:var(--accent3);cursor:pointer;">FABRICAÇÃO</button>
