@@ -173,13 +173,7 @@ table.ctt th{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--te
 
 @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 
-#linhaCards{
-  display:grid;
-  grid-template-columns:repeat(10,1fr);
-  gap:0;
-  align-content:start;
-  flex-shrink:0;
-}
+#linhaCards-placeholder{}
 #linhaCards::-webkit-scrollbar{width:3px;}
 #linhaCards::-webkit-scrollbar-thumb{background:var(--border2);}
 .consol-bottom{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;}
@@ -230,14 +224,15 @@ table.ctt th{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--te
 .linha-toggle-arrow{font-size:9px;color:var(--text3);transition:transform .2s;}
 .linha-toggle-arrow.open{transform:rotate(180deg);}
 .linha-toggle-summary{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-left:auto;}
-#linhaCards{overflow:hidden;max-height:0;transition:max-height .3s ease;}
+#linhaCards{display:grid;grid-template-columns:repeat(10,1fr);gap:0;align-content:start;flex-shrink:0;overflow:hidden;max-height:0;transition:max-height .3s ease;}
 #linhaCards.expanded{max-height:400px;overflow-y:auto;}
 
 /* Inline CT edit */
 .ct-edit-btn{background:transparent;border:1px solid var(--border2);color:var(--text3);
-  cursor:pointer;padding:2px 6px;font-family:'JetBrains Mono',monospace;font-size:9px;
-  transition:all .15s;white-space:nowrap;}
-.ct-edit-btn:hover{border-color:var(--accent2);color:var(--accent3);}
+  cursor:pointer;padding:3px 7px;font-family:'JetBrains Mono',monospace;font-size:10px;
+  transition:all .15s;white-space:nowrap;border-radius:3px;line-height:1;display:inline-flex;align-items:center;gap:3px;}
+.ct-edit-btn:hover{border-color:var(--accent2);color:var(--accent3);background:rgba(37,99,168,.12);}
+.ct-edit-btn svg{width:11px;height:11px;flex-shrink:0;}
 .ct-custom-badge{font-family:'JetBrains Mono',monospace;font-size:8px;
   color:var(--accent2);letter-spacing:.04em;white-space:nowrap;}
 .ct-editing td{background:rgba(37,99,168,.06)!important;}
@@ -248,7 +243,7 @@ table.ctt th{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--te
 
 <div class="topbar">
   <div class="logo">PAINEL DE CONTROLE DE CAPACIDADE</div>
-  <span id="progPeriodInfo" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-left:16px"></span>
+  <span id="progPeriodInfo" style="display:none"></span>
   <div class="tbar-stats">
     <div class="tstat"><span class="sysdot"></span>ONLINE</div>
     <div class="tstat">PAs: <b id="sPAs">—</b></div>
@@ -417,6 +412,7 @@ let ctSets={};
 let globalCTMap={}, globalCompMap={};
 let activeSector='fab', activeFabSector=null, selectedCT=null;
 let rActiveCT=null, rSortCol='indir', rSortAsc=false, rSectorFilter='ALL';
+let paramTab='fab'; // 'fab' | 'mont'
 
 // ── HORIZON STATE ─────────────────────────────────────────────────────
 let PROG_DATA=[];   // full imported program: [{mat, qty, date, pa}]
@@ -760,7 +756,7 @@ function buildCTRows(entries,tbody,maxLoad,ctColor,sectorClass){
     const s=defS(ct);const cap=capMin(ct);
     const pct=cap>0?Math.round(load/cap*100):0;
     if(gargaloFilter==='gargalos'&&pct<80)return;
-    const col=semC(pct);const bw=Math.min(Math.round(load/maxLoad*100),100);
+    const col=semC(pct);const bw=Math.min(pct,100);
     const name=CT_NAMES[ct]||'';
     const ctSec=getSectorForCT(ct);
     const rowColor=ctSec?ctSec.color:ctColor;
@@ -786,7 +782,7 @@ function buildCTRows(entries,tbody,maxLoad,ctColor,sectorClass){
       <td class="ct-status" style="color:${col}">${semTxt(pct)}</td>
       <td style="padding:4px 6px;white-space:nowrap;text-align:right">
         <span class="det-open" style="cursor:pointer;color:var(--text3);font-size:11px;margin-right:4px" data-ct="${ct}">▶</span>
-        <button class="ct-edit-btn" data-ct="${ct}" onclick="inlineEditCT('${ct}',this)">✏</button>
+        <button class="ct-edit-btn" data-ct="${ct}" onclick="inlineEditCT('${ct}',this)" title="Editar parâmetros"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
         ${isCustom?`<button class="ct-edit-btn" data-ct="${ct}" onclick="resetCT('${ct}')" title="Restaurar padrão" style="margin-left:2px">↺</button>`:''}
       </td>`;
 
@@ -814,7 +810,7 @@ function inlineEditCT(ct,btn){
       }
     });
     row.classList.remove('ct-editing');
-    btn.textContent='✏';btn.style.color='';
+    btn.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';btn.style.color='';
     saveCtSets();
     renderSector(activeSector);
     renderExecPanel();
@@ -850,7 +846,8 @@ function resetCT(ct){
 function renderFabSectorCards(){
   const body=document.getElementById('sectorBody');body.innerHTML='';
   const oldDet=document.getElementById('detPanel');if(oldDet)oldDet.remove();selectedCT=null;
-  const lc=document.getElementById('linhaCards');if(lc)lc.style.display='flex';
+  const lc=document.getElementById('linhaCards');
+  if(lc){const wasExpanded=lc.classList.contains('expanded');lc.style.removeProperty('display');if(!wasExpanded)lc.classList.add('expanded');const arr=document.getElementById('linhaArrow');if(arr)arr.classList.add('open');}
   const st=document.querySelector('.sector-tabs');if(st)st.style.display='';
 
   const totals={};FAB_SECTORS.forEach(s=>totals[s.key]={load:0,cap:0});
@@ -898,14 +895,13 @@ function renderFabSectorDetail(sectorKey,filterStatus='ALL',searchTerm=''){
   const sector=FAB_SECTORS.find(s=>s.key===sectorKey);
   const body=document.getElementById('sectorBody');body.innerHTML='';
   const oldDet=document.getElementById('detPanel');if(oldDet)oldDet.remove();selectedCT=null;
-  const lc=document.getElementById('linhaCards');if(lc)lc.style.display='none';
+  const lc=document.getElementById('linhaCards');if(lc){lc.style.removeProperty('display');lc.classList.remove('expanded');}
   const st=document.querySelector('.sector-tabs');if(st)st.style.display='none';
 
   const backBar=document.createElement('div');
   backBar.style.cssText='padding:8px 16px;border-bottom:1px solid var(--border);background:var(--s2);display:flex;align-items:center;gap:12px;flex-shrink:0;flex-wrap:wrap;';
   backBar.innerHTML=`<button id="backToSectors" style="padding:4px 12px;border-radius:3px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-family:'JetBrains Mono',monospace;font-size:11px;cursor:pointer;">← Setores</button>
     <span style="font-size:12px;font-weight:700;color:var(--accent3);font-family:'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase">${sector.label}</span>
-    <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3)">${sectorKey}-xxx</span>
     <div style="margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
       <div style="display:flex;align-items:center;gap:5px;background:var(--bg);border:1px solid var(--border2);border-radius:4px;padding:4px 8px;">
         <input id="fabSectorSearch" placeholder="Buscar CT..." value="${searchTerm}" style="background:transparent;border:none;outline:none;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text);width:120px;">
@@ -944,7 +940,7 @@ function renderFabSectorDetail(sectorKey,filterStatus='ALL',searchTerm=''){
   const tbody=document.createElement('tbody');
   entries.forEach(([ct,load])=>{
     const s=defS(ct),cap=capMin(ct),pct=cap>0?Math.round(load/cap*100):0;
-    const col=semC(pct),bw=Math.min(Math.round(load/maxLoad*100),100),name=CT_NAMES[ct]||'';
+    const col=semC(pct),bw=Math.min(pct,100),name=CT_NAMES[ct]||'';
     const isCustom=ctSets[ct]&&Object.keys(ctSets[ct]).some(k=>k!=='hc');
     const tr=document.createElement('tr');tr.className='ct-main-tr';tr.style.borderBottom='1px solid var(--border2)';
     tr.innerHTML=`
@@ -960,7 +956,7 @@ function renderFabSectorDetail(sectorKey,filterStatus='ALL',searchTerm=''){
       <td style="padding:10px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:${col}">${semTxt(pct)}</td>
       <td style="padding:6px 8px;text-align:right;white-space:nowrap">
         <span class="det-open" style="cursor:pointer;color:var(--text3);font-size:13px;margin-right:6px" data-ct="${ct}">▶</span>
-        <button class="ct-edit-btn" data-ct="${ct}" onclick="inlineEditCT('${ct}',this)">✏</button>
+        <button class="ct-edit-btn" data-ct="${ct}" onclick="inlineEditCT('${ct}',this)" title="Editar parâmetros"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
         ${isCustom?`<button class="ct-edit-btn" data-ct="${ct}" onclick="resetCT('${ct}')" title="Restaurar padrão" style="margin-left:2px">↺</button>`:''}
       </td>`;
 
@@ -1057,11 +1053,13 @@ function renderLinhaCards(){
     toggle.addEventListener('click',toggleLinhaCards);
     // Create cards container
     container=document.createElement('div');container.id='linhaCards';
+    container.classList.add('expanded');
+    const arrow=document.getElementById('linhaArrow');if(arrow)arrow.classList.add('open');
     const st=document.querySelector('.sector-tabs')||document.querySelector('.consol-bottom');
     if(st){st.parentNode.insertBefore(container,st);st.parentNode.insertBefore(toggle,container);}
   }
-  if(!entries.length){container.style.display='none';return;}
-  container.style.display='grid';
+  if(!entries.length){container.style.maxHeight='0';container.classList.remove('expanded');return;}
+  container.style.removeProperty('display');
 
   function fmt(m){
     if(!m||m<1)return'—';
@@ -1351,19 +1349,35 @@ function getSectorForCTParams(ct){
   return null;
 }
 
+function switchParamTab(tab){
+  paramTab=tab;
+  const fabBtn=document.getElementById('paramTabFab');
+  const montBtn=document.getElementById('paramTabMont');
+  if(fabBtn){fabBtn.style.borderBottomColor=tab==='fab'?'var(--accent2)':'transparent';fabBtn.style.color=tab==='fab'?'var(--accent3)':'var(--text3)';}
+  if(montBtn){montBtn.style.borderBottomColor=tab==='mont'?'var(--accent2)':'transparent';montBtn.style.color=tab==='mont'?'var(--accent3)':'var(--text3)';}
+  renderParamsTable();
+}
+
 function renderParamsTable(){
   const body=document.getElementById('paramsBody');if(!body)return;
   const hDays=getHorizonDays();
+  const isMontTab=paramTab==='mont';
   // Group CTs by sector
-  const allCTs=Object.keys(CTI).filter(ct=>isFab(ct)).sort();
+  const allCTs=Object.keys(CTI).filter(ct=>isMontTab?!isFab(ct):isFab(ct)).sort();
   const bySector={};
   for(const ct of allCTs){
-    const sk=getSectorCTParams(ct)||'OUTROS';
+    const sk=isMontTab?('MONT_'+ct.replace(/-\d+$/,'').replace(/-/g,'').slice(0,8)):getSectorCTParams(ct)||'OUTROS';
     if(!bySector[sk])bySector[sk]=[];
     bySector[sk].push(ct);
   }
+
+  // For montagem, build sector list dynamically from CT prefixes
+  let sectorDefs=isMontTab?
+    Object.keys(bySector).sort().map(k=>({key:k,label:k.replace('MONT_','')})):
+    SECTOR_PARAMS_DEF;
+
   let html='';
-  for(const sec of SECTOR_PARAMS_DEF){
+  for(const sec of sectorDefs){
     const cts=bySector[sec.key]||[];
     if(!cts.length)continue;
     html+=`<div style="margin-bottom:18px;">
@@ -1395,8 +1409,8 @@ function renderParamsTable(){
               <td style="padding:3px 4px;text-align:center"><input class="tci" type="number" min="1" max="24" value="${s.hturno}" data-ct="${ct}" data-f="hturno" onchange="updateParamCT(this)"></td>
               <td style="padding:3px 4px;text-align:center"><input class="tci" type="number" min="1" max="100" value="${s.efic}" data-ct="${ct}" data-f="efic" onchange="updateParamCT(this)"></td>
               <td style="padding:3px 4px;text-align:center"><input class="tci" type="number" min="1" max="99" value="${hc}" data-ct="${ct}" data-f="hc" onchange="updateParamCT(this)"></td>
-              <td style="padding:5px 8px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3)">${s.dias}</td>
-              <td style="padding:5px 8px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent3)">${cap}</td>
+              <td style="padding:3px 4px;text-align:center"><input class="tci" type="number" min="1" max="31" value="${s.dias}" data-ct="${ct}" data-f="dias" onchange="updateParamCT(this)"></td>
+              <td data-cap style="padding:5px 8px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent3)">${cap}</td>
               <td style="padding:3px 6px">${isCustom2?`<button onclick="resetCT('${ct}')" style="padding:2px 7px;border:1px solid var(--border2);background:transparent;color:var(--text3);font-family:'JetBrains Mono',monospace;font-size:9px;cursor:pointer;" title="Restaurar padrão">↺</button>`:''}
               </td>
             </tr>`;
@@ -1431,8 +1445,8 @@ function updateParamCT(inp){
   if(row){
     const s=defS(ct);
     const cap=(s.turnos*s.hturno*s.dias*(s.efic/100)).toFixed(1);
-    const cells=row.querySelectorAll('td');
-    if(cells[7])cells[7].textContent=cap;
+    const capCell=row.querySelector('td[data-cap]');
+    if(capCell)capCell.textContent=cap;
   }
 }
 
@@ -1561,9 +1575,12 @@ init();
   <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;background:var(--bg);">
     <div style="padding:10px 20px;border-bottom:1px solid var(--border);background:var(--s1);display:flex;align-items:center;gap:14px;flex-shrink:0;">
       <div style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.12em;color:var(--text2)">PARÂMETROS — HC / EFICIÊNCIA / HORAS</div>
-      <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3)">Dias calculados pelo horizonte selecionado</span>
       <button onclick="saveParams()" style="margin-left:auto;padding:4px 14px;border:1px solid var(--accent);background:rgba(37,99,168,.15);color:var(--accent3);font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;cursor:pointer;">✓ Salvar</button>
       <button onclick="resetParams()" style="padding:4px 10px;border:1px solid var(--border2);background:transparent;color:var(--text3);font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer;">↺ Resetar</button>
+    </div>
+    <div style="display:flex;background:var(--s1);border-bottom:1px solid var(--border);padding:0 20px;flex-shrink:0;">
+      <button id="paramTabFab" onclick="switchParamTab('fab')" style="padding:7px 16px;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;border:none;border-bottom:2px solid var(--accent2);background:transparent;color:var(--accent3);cursor:pointer;">FABRICAÇÃO</button>
+      <button id="paramTabMont" onclick="switchParamTab('mont')" style="padding:7px 16px;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;border:none;border-bottom:2px solid transparent;background:transparent;color:var(--text3);cursor:pointer;">MONTAGEM</button>
     </div>
     <div style="flex:1;overflow-y:auto;padding:14px 20px;">
       <div id="paramsBody"></div>
