@@ -784,10 +784,10 @@ function buildCTRows(entries,tbody,maxLoad,ctColor,sectorClass){
       </td>
       <td><div class="ct-bar-bg"><div class="ct-bar-fill" style="width:${bw}%;background:${col}"></div></div></td>
       <td class="ct-status" style="color:${col}">${semTxt(pct)}</td>
-      <td style="padding:4px 6px;white-space:nowrap;display:flex;gap:3px;align-items:center">
-        <span class="det-open" style="cursor:pointer;color:var(--text3);font-size:11px" data-ct="${ct}">▶</span>
+      <td style="padding:4px 6px;white-space:nowrap;text-align:right">
+        <span class="det-open" style="cursor:pointer;color:var(--text3);font-size:11px;margin-right:4px" data-ct="${ct}">▶</span>
         <button class="ct-edit-btn" data-ct="${ct}" onclick="inlineEditCT('${ct}',this)">✏</button>
-        ${isCustom?`<button class="ct-edit-btn" data-ct="${ct}" onclick="resetCT('${ct}')" title="Restaurar padrão" style="color:var(--text3)">↺</button>`:''}
+        ${isCustom?`<button class="ct-edit-btn" data-ct="${ct}" onclick="resetCT('${ct}')" title="Restaurar padrão" style="margin-left:2px">↺</button>`:''}
       </td>`;
     tr.querySelectorAll('.tci').forEach(inp=>inp.addEventListener('change',e=>{
       e.stopPropagation();const c=e.target.dataset.ct,f=e.target.dataset.f;
