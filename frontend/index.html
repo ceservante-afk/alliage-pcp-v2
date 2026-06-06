@@ -839,6 +839,7 @@ async function init(){
     try{ctiData=await fetch('/static/cti.json').then(r=>{if(!r.ok)throw new Error();return r.json();});}
     catch(e){ctiData=await api('/api/roteiro/cti');}
     CTI=ctiData;
+    buildCTIIndex(); // build mat→[{ct,indir,qty_base}] index for fast lookup
     document.getElementById('rCTCount').textContent=Object.keys(CTI).length;
   }catch(e){console.warn('Static data load error:',e);}
 
@@ -921,6 +922,19 @@ function renderPills(ctMap){
 // ── CALCULATE ─────────────────────────────────────────────────────────
 // BOM tree cache (client-side)
 const BOM_CACHE={};
+// Inverted index: mat → [{ct, indir, qty_base}] — built once after CTI loads
+let CTI_BY_MAT={};
+
+function buildCTIIndex(){
+  CTI_BY_MAT={};
+  for(const[ct,ops] of Object.entries(CTI)){
+    for(const op of ops){
+      const m=op.mat;
+      if(!CTI_BY_MAT[m])CTI_BY_MAT[m]=[];
+      CTI_BY_MAT[m].push({ct, indir:op.indir, qty_base:op.qty_base||1});
+    }
+  }
+}
 
 async function getBOMTree(mat){
   if(BOM_CACHE[mat])return BOM_CACHE[mat];
@@ -930,32 +944,29 @@ async function getBOMTree(mat){
 }
 
 function explodeTree(node, qtyPA, compMap){
-  // Direct qty (no cascade) -- each component uses its own qty in direct parent
   if(!node||!node.children)return;
   for(const child of node.children){
     const cq=parseFloat(child.qty)||1;
-    if(cq<1)continue; // skip scrap factors
+    if(cq<1)continue;
     const directQty=qtyPA*cq;
     const mat=child.mat;
-    // Check if this material has roteiro ops
-    // We use CTI (already loaded) to find CT operations
-    for(const[ct,ops]of Object.entries(CTI)){
-      const op=ops.find(o=>o.mat===mat);
-      if(!op)continue;
-      const indirUnit=op.indir/(op.qty_base||1);
-      const mins=directQty*indirUnit;
-      if(!compMap[ct])compMap[ct]=[];
-      let entry=compMap[ct].find(e=>e.mat===mat);
-      if(!entry){
-        entry={mat,desc:child.desc||'',tipo:child.tipo||'',
-               accQ:directQty,qtyTotal:directQty,indirUnit,mins};
-        compMap[ct].push(entry);
-      } else {
-        entry.qtyTotal+=directQty;
-        entry.mins+=mins;
+    const opsForMat=CTI_BY_MAT[mat];
+    if(opsForMat){
+      for(const{ct,indir,qty_base} of opsForMat){
+        const indirUnit=indir/qty_base;
+        const mins=directQty*indirUnit;
+        if(!compMap[ct])compMap[ct]=[];
+        let entry=compMap[ct].find(e=>e.mat===mat);
+        if(!entry){
+          entry={mat,desc:child.desc||'',tipo:child.tipo||'',
+                 accQ:directQty,qtyTotal:directQty,indirUnit,mins};
+          compMap[ct].push(entry);
+        } else {
+          entry.qtyTotal+=directQty;
+          entry.mins+=mins;
+        }
       }
     }
-    // Recurse with same qtyPA (direct, not cascaded)
     explodeTree(child, qtyPA, compMap);
   }
 }
@@ -987,18 +998,31 @@ async function calcPA(num){
     if(queued[num]){queued[num].ctMap=ctMap;queued[num].compMap=compMap;}
   }catch(e){console.error('calcPA error:',e);}
   if(btn){btn.classList.remove('calc-spin');}
-  renderProgGrid();
 }
 
 async function calcAll(){
   const keys=Object.keys(queued);
   if(!keys.length)return;
   const ps=document.getElementById('progSummary');
-  if(ps)ps.textContent='Calculando...';
+  const btn=document.getElementById('calcAll');
+  if(btn){btn.disabled=true;btn.textContent='Calculando...';}
+
+  // Phase 1: fetch all BOM trees in parallel (network-bound, safe to parallelize)
+  if(ps)ps.textContent='Carregando BOMs...';
+  const pas=keys.map(k=>queued[k].pa);
+  await Promise.all([...new Set(pas.map(p=>p.mat))].map(mat=>getBOMTree(mat)));
+
+  // Phase 2: calculate each PA (CPU-bound, sequential with yield)
+  let done=0;
   for(const num of keys){
     await calcPA(num);
-    renderProgGrid();
+    done++;
+    if(ps)ps.textContent=`Calculando ${done}/${keys.length}...`;
+    // Yield to browser every 5 PAs to avoid jank
+    if(done%5===0)await new Promise(r=>setTimeout(r,0));
   }
+
+  if(btn){btn.disabled=false;btn.textContent='▶ Calcular Tudo';}
   updateProgCounter();
   renderProgGrid();
 }
@@ -1027,7 +1051,6 @@ function getGlobalMaps(){
 
 // ── CONSOLIDADO ───────────────────────────────────────────────────────
 function renderConsol(){
-  Object.keys(queued).forEach(n=>{if(!queued[n].ctMap)calcPA(n);});
   const n=Object.keys(queued).length;
   const pcs=Object.values(queued).reduce((s,{qty})=>s+qty,0);
   document.getElementById('consolSub').textContent=n+' PA(s)  ·  '+Math.round(pcs).toLocaleString('pt-BR')+' peças programadas';
