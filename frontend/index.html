@@ -457,8 +457,27 @@ function fmtH(m){
   const h=Math.floor(m/60),mn=Math.round(m%60);
   return h+'h'+(mn>0?' '+String(mn).padStart(2,'0')+'m':'');
 }
-function semC(p){return p>=100?'#ef4444':p>=80?'#f59e0b':'#22c55e';}
-function semTxt(p){return p>=100?'CRÍTICO':p>=80?'ALERTA':'NORMAL';}
+function semC(p,inactive){return inactive?'#6b7280':p>=100?'#ef4444':p>=80?'#f59e0b':'#22c55e';}
+function semTxt(p,inactive){return inactive?'INATIVO':p>=100?'CRÍTICO':p>=80?'ALERTA':'NORMAL';}
+function isInactive(ct){return ctSets[ct]?.inactive===true;}
+
+function toggleInactiveCT(ct){
+  if(!isAdmin())return;
+  if(!ctSets[ct])ctSets[ct]={};
+  if(ctSets[ct].inactive){
+    // Reativar — remove flag
+    delete ctSets[ct].inactive;
+  } else {
+    // Inativar — seta flag
+    ctSets[ct].inactive=true;
+  }
+  saveCtSets();
+  renderParamsTable();
+  // Atualizar consolidado se estiver aberto
+  if(document.getElementById('sConsol')?.classList.contains('on')){
+    renderConsol();
+  }
+}
 function getSectorKey(ct){const s=getSectorForCT(ct);return s?s.key:null;}
 
 async function api(path){
@@ -798,7 +817,7 @@ function setHorizon(h){
 }
 
 function defS(ct){return{turnos:ctSets[ct]?.turnos??1,hturno:ctSets[ct]?.hturno??8.8,dias:ctSets[ct]?.dias??5,efic:ctSets[ct]?.efic??85};}
-function capMin(ct){const s=defS(ct);return s.turnos*s.hturno*s.dias*(s.efic/100)*60;}
+function capMin(ct){if(isInactive(ct))return 0;const s=defS(ct);return s.turnos*s.hturno*s.dias*(s.efic/100)*60;}
 function saveCtSets(){try{localStorage.setItem('pcp_cts_v2',JSON.stringify(ctSets));}catch(e){}}
 
 function saveProgData(){
@@ -1163,9 +1182,10 @@ function buildCTRows(entries,tbody,maxLoad,ctColor,sectorClass){
   entries.forEach(([ct,val])=>{
     const load=ctLoad(val),setup=ctSetup(val),proc=load-setup;
     const s=defS(ct);const cap=capMin(ct);
+    const inactive=isInactive(ct);
     const pct=cap>0?Math.round(load/cap*100):0;
-    if(gargaloFilter==='gargalos'&&pct<80)return;
-    const col=semC(pct);const bw=Math.min(pct,100);
+    if(gargaloFilter==='gargalos'&&pct<80&&!inactive)return;
+    const col=semC(pct,inactive);const bw=Math.min(pct,100);
     const name=CT_NAMES[ct]||'';
     const ctSec=getSectorForCT(ct);
     const rowColor=ctSec?ctSec.color:ctColor;
@@ -1194,7 +1214,7 @@ function buildCTRows(entries,tbody,maxLoad,ctColor,sectorClass){
         ${excessStr?`<span class="excess-badge">${excessStr} acima</span>`:''}
       </td>
       <td>${barHtml}</td>
-      <td class="ct-status" style="color:${col}">${semTxt(pct)}</td>
+      <td class="ct-status" style="color:${col}">${semTxt(pct,inactive)}</td>
       <td style="white-space:nowrap;text-align:right">
         <span class="det-open" style="cursor:pointer;color:var(--text3);font-size:11px;margin-right:4px" data-ct="${ct}">▶</span>
         <button class="ct-edit-btn" data-ct="${ct}" onclick="inlineEditCT('${ct}',this)" title="Editar parâmetros"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
@@ -1357,8 +1377,9 @@ function renderFabSectorDetail(sectorKey,filterStatus='ALL',searchTerm=''){
   const tbody=document.createElement('tbody');
   entries.forEach(([ct,val])=>{
     const load=ctLoad(val),setup=ctSetup(val),proc=load-setup;
-    const s=defS(ct),cap=capMin(ct),pct=cap>0?Math.round(load/cap*100):0;
-    const col=semC(pct),bw=Math.min(pct,100),name=CT_NAMES[ct]||'';
+    const s=defS(ct),cap=capMin(ct),inactive=isInactive(ct);
+    const pct=cap>0?Math.round(load/cap*100):0;
+    const col=semC(pct,inactive),bw=Math.min(pct,100),name=CT_NAMES[ct]||'';
     const isCustom=ctSets[ct]&&Object.keys(ctSets[ct]).some(k=>k!=='hc');
     const hasSetup=setup>0;
     const procW=cap>0?Math.min(proc/cap*100,100):0;
@@ -1377,7 +1398,7 @@ function renderFabSectorDetail(sectorKey,filterStatus='ALL',searchTerm=''){
       <td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center" data-field="efic">${s.efic}</td>
       <td class="ct-pct" style="color:${col}">${pct}%</td>
       <td>${barHtml}</td>
-      <td class="ct-status" style="color:${col}">${semTxt(pct)}</td>
+      <td class="ct-status" style="color:${col}">${semTxt(pct,inactive)}</td>
       <td style="white-space:nowrap;text-align:right">
         <span class="det-open" style="cursor:pointer;color:var(--text3);font-size:13px;margin-right:6px" data-ct="${ct}">▶</span>
         <button class="ct-edit-btn" data-ct="${ct}" onclick="inlineEditCT('${ct}',this)" title="Editar parâmetros"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
@@ -1779,12 +1800,13 @@ const SECTOR_PARAMS_DEF = [
   {key:'USIN',  label:'Usinagem',        cts:null},
   {key:'MUSI',  label:'Micro Usinagem',  cts:null},
   {key:'PINP',  label:'Pintura Pó',      cts:null},
-  {key:'GALV',  label:'Galvanoplastia',  cts:null},
+  {key:'GALV',  label:'Galvanoplastia',  cts:null, extraCts:['GALV-ANOD','GALV-ZINC','GALV-TRATAR']},
 ];
 
 function getSectorForCTParams(ct){
   if(['ESTA-024','ESTA-008'].includes(ct))return'LASER';
   if(['ESTA-033','ESTA-009','ESTA-020','ESTA-028','ESTA-032'].includes(ct))return'SOLDA';
+  if(['GALV-ANOD','GALV-ZINC','GALV-TRATAR'].includes(ct))return'GALV';
   const pfx=['ESTA','USIN','MUSI','PINP','GALV'];
   for(const p of pfx)if(ct.startsWith(p))return p;
   return null;
@@ -1819,7 +1841,9 @@ function renderParamsTable(){
 
   let html='';
   for(const sec of sectorDefs){
-    const cts=bySector[sec.key]||[];
+    let cts=(bySector[sec.key]||[]);
+    // Add virtual CTs (e.g. GALV-ANOD, GALV-ZINC, GALV-TRATAR) that aren't in CTI
+    if(sec.extraCts)cts=[...cts,...sec.extraCts.filter(c=>!cts.includes(c))];
     if(!cts.length)continue;
     html+=`<div style="margin-bottom:18px;">
       <div style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;color:var(--accent3);letter-spacing:.14em;text-transform:uppercase;padding:6px 0;border-bottom:1px solid var(--border);margin-bottom:6px;">${sec.label}</div>
@@ -1849,21 +1873,24 @@ function renderParamsTable(){
         <tbody>
           ${cts.map(ct=>{
             const s=defS(ct);
-            const cap=(s.turnos*s.hturno*hDays*(s.efic/100)).toFixed(1);
+            const inactive=isInactive(ct);
+            const cap=inactive?'—':(s.turnos*s.hturno*hDays*(s.efic/100)).toFixed(1);
             const hc=ctSets[ct]?.hc||1;
-            const isCustom2=ctSets[ct]&&Object.keys(ctSets[ct]).some(k=>k!=='hc');
-            return`<tr class="params-row" style="border-bottom:1px solid var(--border);${isCustom2?'background:rgba(37,99,168,.04)':''}">
-              <td style="padding:5px 8px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ct}
-                ${isCustom2?'<span style="font-family:JetBrains Mono,monospace;font-size:7px;color:var(--accent2);display:block">⚙ personalizado</span>':''}
+            const isCustom2=ctSets[ct]&&Object.keys(ctSets[ct]).some(k=>k!=='hc'&&k!=='inactive');
+            return`<tr class="params-row" style="border-bottom:1px solid var(--border);${inactive?'background:rgba(107,114,128,.07);opacity:.8':isCustom2?'background:rgba(37,99,168,.04)':''}">
+              <td style="padding:5px 8px;font-family:'JetBrains Mono',monospace;font-size:10px;color:${inactive?'#6b7280':'var(--accent3)'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ct}
+                ${inactive?'<span style="font-family:JetBrains Mono,monospace;font-size:7px;color:#6b7280;display:block">⊘ inativo</span>':isCustom2?'<span style="font-family:JetBrains Mono,monospace;font-size:7px;color:var(--accent2);display:block">⚙ personalizado</span>':''}
               </td>
               <td style="padding:5px 8px;font-size:10px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${CT_NAMES[ct]||'—'}</td>
-              <td style="padding:3px 4px;text-align:center"><input class="tci" type="number" min="1" max="3" value="${s.turnos}" data-ct="${ct}" data-f="turnos" onchange="updateParamCT(this)"></td>
-              <td style="padding:3px 4px;text-align:center"><input class="tci" type="number" min="1" max="24" value="${s.hturno}" data-ct="${ct}" data-f="hturno" onchange="updateParamCT(this)"></td>
-              <td style="padding:3px 4px;text-align:center"><input class="tci" type="number" min="1" max="100" value="${s.efic}" data-ct="${ct}" data-f="efic" onchange="updateParamCT(this)"></td>
-              <td style="padding:3px 4px;text-align:center"><input class="tci" type="number" min="1" max="99" value="${hc}" data-ct="${ct}" data-f="hc" onchange="updateParamCT(this)"></td>
-              <td style="padding:3px 4px;text-align:center"><input class="tci" type="number" min="1" max="31" value="${s.dias}" data-ct="${ct}" data-f="dias" onchange="updateParamCT(this)"></td>
-              <td data-cap style="padding:5px 8px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent3)">${cap}</td>
-              <td style="padding:3px 6px;text-align:center">${isCustom2?`<button onclick="resetCT('${ct}')" style="padding:2px 7px;border:1px solid var(--border2);background:transparent;color:var(--text3);font-family:'JetBrains Mono',monospace;font-size:9px;cursor:pointer;" title="Restaurar padrão">↺</button>`:''}
+              <td style="padding:3px 4px;text-align:center"><input class="tci" type="number" min="1" max="3" value="${s.turnos}" data-ct="${ct}" data-f="turnos" onchange="updateParamCT(this)" ${inactive?'disabled':''}></td>
+              <td style="padding:3px 4px;text-align:center"><input class="tci" type="number" min="1" max="24" value="${s.hturno}" data-ct="${ct}" data-f="hturno" onchange="updateParamCT(this)" ${inactive?'disabled':''}></td>
+              <td style="padding:3px 4px;text-align:center"><input class="tci" type="number" min="1" max="100" value="${s.efic}" data-ct="${ct}" data-f="efic" onchange="updateParamCT(this)" ${inactive?'disabled':''}></td>
+              <td style="padding:3px 4px;text-align:center"><input class="tci" type="number" min="1" max="99" value="${hc}" data-ct="${ct}" data-f="hc" onchange="updateParamCT(this)" ${inactive?'disabled':''}></td>
+              <td style="padding:3px 4px;text-align:center"><input class="tci" type="number" min="1" max="31" value="${s.dias}" data-ct="${ct}" data-f="dias" onchange="updateParamCT(this)" ${inactive?'disabled':''}></td>
+              <td data-cap style="padding:5px 8px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:10px;color:${inactive?'#6b7280':'var(--accent3)'}">${cap}</td>
+              <td style="padding:3px 6px;text-align:center;white-space:nowrap;">
+                <button onclick="toggleInactiveCT('${ct}')" style="padding:2px 6px;border:1px solid ${inactive?'#6b7280':'var(--border2)'};background:${inactive?'rgba(107,114,128,.15)':'transparent'};color:${inactive?'#9ca3af':'var(--text3)'};font-family:'JetBrains Mono',monospace;font-size:8px;cursor:pointer;margin-bottom:2px;" title="${inactive?'Reativar':'Inativar'}">${inactive?'▶ Ativar':'⊘'}</button>
+                ${isCustom2&&!inactive?`<button onclick="resetCT('${ct}')" style="padding:2px 6px;border:1px solid var(--border2);background:transparent;color:var(--text3);font-family:'JetBrains Mono',monospace;font-size:9px;cursor:pointer;" title="Restaurar padrão">↺</button>`:''}
               </td>
             </tr>`;
           }).join('')}
@@ -1924,16 +1951,17 @@ function buildExecStats(){
   const ctLoads=Object.entries(globalCTMap).map(([ct,val])=>{
     const load=ctLoad(val),setup=ctSetup(val);
     const cap=capMin(ct);
+    const inactive=isInactive(ct);
     const pct=cap>0?Math.round(load/cap*100):0;
     const excess=Math.max(0,load-cap);
-    return{ct,load,setup,cap,pct,excess};
-  }).filter(x=>x.cap>0);
+    return{ct,load,setup,cap,pct,excess,inactive};
+  }).filter(x=>x.cap>0||x.inactive);
 
-  const critical=ctLoads.filter(x=>x.pct>=100);
-  const warning=ctLoads.filter(x=>x.pct>=80&&x.pct<100);
-  const top=ctLoads.sort((a,b)=>b.pct-a.pct)[0];
-  const totalExcess=ctLoads.reduce((s,x)=>s+x.excess,0);
-  const ranking=ctLoads.filter(x=>x.pct>0).sort((a,b)=>b.pct-a.pct).slice(0,10);
+  const critical=ctLoads.filter(x=>!x.inactive&&x.pct>=100);
+  const warning=ctLoads.filter(x=>!x.inactive&&x.pct>=80&&x.pct<100);
+  const top=ctLoads.filter(x=>!x.inactive).sort((a,b)=>b.pct-a.pct)[0];
+  const totalExcess=ctLoads.filter(x=>!x.inactive).reduce((s,x)=>s+x.excess,0);
+  const ranking=ctLoads.filter(x=>x.pct>0||x.inactive).sort((a,b)=>b.pct-a.pct).slice(0,10);
   return{critical,warning,top,totalExcess,ranking,ctLoads};
 }
 
