@@ -982,10 +982,13 @@ async function getBOMTree(mat){
   return tree;
 }
 
-// Setup time (min/peça) por CT de solda elétrica
+// Setup time (min) por item distinto que passa no CT = 2 setups × min/setup
 const CT_SETUP_MIN={
-  'ESTA-009':30,'ESTA-033':30,
-  'ESTA-020':15,'ESTA-028':15,'ESTA-032':15,
+  'ESTA-009':30,  // 15min × 2
+  'ESTA-033':30,  // 15min × 2
+  'ESTA-020':60,  // 30min × 2
+  'ESTA-028':60,
+  'ESTA-032':60,
 };
 
 function explodeTree(node, qtyPA, compMap){
@@ -999,15 +1002,17 @@ function explodeTree(node, qtyPA, compMap){
     if(opsForMat){
       for(const{ct,indir,qty_base} of opsForMat){
         const indirUnit=indir/qty_base;
-        const setupMin=CT_SETUP_MIN[ct]||0;
-        const mins=directQty*(indirUnit+setupMin);
+        const mins=directQty*indirUnit;
         if(!compMap[ct])compMap[ct]=[];
         let entry=compMap[ct].find(e=>e.mat===mat);
         if(!entry){
+          // New distinct item in this CT — add setup time once
+          const setupMin=CT_SETUP_MIN[ct]||0;
           entry={mat,desc:child.desc||'',tipo:child.tipo||'',
-                 accQ:directQty,qtyTotal:directQty,indirUnit:indirUnit+setupMin,mins};
+                 accQ:directQty,qtyTotal:directQty,indirUnit,mins:mins+setupMin,setupMin};
           compMap[ct].push(entry);
         } else {
+          // Same item already exists — only add process time, no additional setup
           entry.qtyTotal+=directQty;
           entry.mins+=mins;
         }
