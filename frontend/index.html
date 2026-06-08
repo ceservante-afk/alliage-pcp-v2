@@ -982,8 +982,10 @@ async function getBOMTree(mat){
   return tree;
 }
 
-// Setup time (min) por item distinto que passa no CT = 2 setups × min/setup
-const CT_SETUP_MIN={
+// Helper: extrai carga total (processo + setup) de uma entrada do ctMap
+function ctLoad(val){return typeof val==='object'&&val!==null?(val.load_min||0):parseFloat(val)||0;}
+function ctSetup(val){return typeof val==='object'&&val!==null?(val.setup_min||0):0;}
+function ctProcess(val){return ctLoad(val)-ctSetup(val);}
   'ESTA-009':30,  // 15min × 2
   'ESTA-033':30,  // 15min × 2
   'ESTA-020':60,  // 30min × 2
@@ -1006,13 +1008,10 @@ function explodeTree(node, qtyPA, compMap){
         if(!compMap[ct])compMap[ct]=[];
         let entry=compMap[ct].find(e=>e.mat===mat);
         if(!entry){
-          // New distinct item in this CT — add setup time once
-          const setupMin=CT_SETUP_MIN[ct]||0;
           entry={mat,desc:child.desc||'',tipo:child.tipo||'',
-                 accQ:directQty,qtyTotal:directQty,indirUnit,mins:mins+setupMin,setupMin};
+                 accQ:directQty,qtyTotal:directQty,indirUnit,mins};
           compMap[ct].push(entry);
         } else {
-          // Same item already exists — only add process time, no additional setup
           entry.qtyTotal+=directQty;
           entry.mins+=mins;
         }
@@ -1082,10 +1081,10 @@ function getGlobalMaps(){
   const ctMap={},compMap={};
   for(const{ctMap:cm,compMap:pm}of Object.values(queued)){
     if(!cm)continue;
-    // ctMap values are {load_min, components}
     for(const[ct,data]of Object.entries(cm)){
       const load=typeof data==='object'&&data.load_min!=null?data.load_min:parseFloat(data)||0;
-      ctMap[ct]=(ctMap[ct]||0)+load;
+      if(!ctMap[ct])ctMap[ct]={load_min:0,setup_min:0};
+      ctMap[ct].load_min+=load;
     }
     for(const[ct,items]of Object.entries(pm||{})){
       if(!compMap[ct])compMap[ct]=[];
@@ -1096,6 +1095,15 @@ function getGlobalMaps(){
         e.qtyTotal+=(item.qtyTotal||item.accQ||0);
       }
     }
+  }
+  // Calculate setup per distinct item in welding CTs (after all PAs aggregated)
+  for(const[ct,setupMin] of Object.entries(CT_SETUP_MIN)){
+    if(!compMap[ct])continue;
+    const distinctItems=compMap[ct].length;
+    const totalSetup=distinctItems*setupMin;
+    if(!ctMap[ct])ctMap[ct]={load_min:0,setup_min:0};
+    ctMap[ct].setup_min=totalSetup;
+    ctMap[ct].load_min+=totalSetup; // setup conta na carga total
   }
   return{ctMap,compMap};
 }
@@ -1123,8 +1131,8 @@ function renderSector(sector){
   const body=document.getElementById('sectorBody');
   body.innerHTML='';
   const oldDet=document.getElementById('detPanel');if(oldDet)oldDet.remove();selectedCT=null;
-  const entries=Object.entries(globalCTMap).filter(([ct])=>!isFab(ct)).sort((a,b)=>b[1]-a[1]);
-  const maxLoad=entries[0]?.[1]||1;
+  const entries=Object.entries(globalCTMap).filter(([ct])=>!isFab(ct)).sort((a,b)=>ctLoad(b[1])-ctLoad(a[1]));
+  const maxLoad=ctLoad(entries[0]?.[1])||1;
   const scroll=document.createElement('div');scroll.className='ct-scroll';
   const tbl=document.createElement('table');tbl.className='ctt';
   tbl.innerHTML=`<colgroup><col style="width:220px"><col style="width:90px"><col style="width:80px"><col style="width:60px"><col style="width:68px"><col style="width:52px"><col style="width:62px"><col style="width:72px"><col style="width:100px"><col style="width:72px"><col style="width:84px"></colgroup><thead><tr><th>CT</th><th>Carga</th><th>Cap.</th><th style="text-align:center">Turnos</th><th style="text-align:center">H/Turno</th><th style="text-align:center">Dias</th><th style="text-align:center">Efic %</th><th>%</th><th>Ocupação</th><th>Status</th><th style="text-align:right">Ações</th></tr></thead>`;
@@ -1135,7 +1143,8 @@ function renderSector(sector){
 }
 
 function buildCTRows(entries,tbody,maxLoad,ctColor,sectorClass){
-  entries.forEach(([ct,load])=>{
+  entries.forEach(([ct,val])=>{
+    const load=ctLoad(val),setup=ctSetup(val),proc=load-setup;
     const s=defS(ct);const cap=capMin(ct);
     const pct=cap>0?Math.round(load/cap*100):0;
     if(gargaloFilter==='gargalos'&&pct<80)return;
@@ -1147,6 +1156,12 @@ function buildCTRows(entries,tbody,maxLoad,ctColor,sectorClass){
     const excess=Math.max(0,load-cap);
     const excessStr=excess>0?`+${Math.floor(excess/60)}h${Math.round(excess%60)>0?Math.round(excess%60)+'m':''}`:'';
     const isCustom=ctSets[ct]&&Object.keys(ctSets[ct]).some(k=>k!=='_editing');
+    const hasSetup=setup>0;
+    const procW=cap>0?Math.min(proc/cap*100,100):0;
+    const setupW=cap>0?Math.min(setup/cap*100,Math.max(0,100-procW)):0;
+    const barHtml=hasSetup
+      ?`<div class="ct-bar-bg"><div style="display:flex;height:100%;border-radius:4px;overflow:hidden"><div style="width:${procW}%;background:${col};transition:width .3s"></div><div style="width:${setupW}%;background:#f59e0b;transition:width .3s" title="Setup: ${fmtH(setup)}"></div></div></div>`
+      :`<div class="ct-bar-bg"><div class="ct-bar-fill" style="width:${bw}%;background:${col}"></div></div>`;
     const tr=document.createElement('tr');tr.className=rowClass;
     tr.innerHTML=`
       <td><div class="ct-name" style="color:${rowColor};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${ct}</div>
@@ -1161,7 +1176,7 @@ function buildCTRows(entries,tbody,maxLoad,ctColor,sectorClass){
       <td class="ct-pct" style="color:${col}">${pct}%
         ${excessStr?`<span class="excess-badge">${excessStr} acima</span>`:''}
       </td>
-      <td><div class="ct-bar-bg"><div class="ct-bar-fill" style="width:${bw}%;background:${col}"></div></div></td>
+      <td>${barHtml}</td>
       <td class="ct-status" style="color:${col}">${semTxt(pct)}</td>
       <td style="white-space:nowrap;text-align:right">
         <span class="det-open" style="cursor:pointer;color:var(--text3);font-size:11px;margin-right:4px" data-ct="${ct}">▶</span>
@@ -1236,9 +1251,9 @@ function renderFabSectorCards(){
   const st=document.querySelector('.sector-tabs');if(st)st.style.display='';
 
   const totals={};FAB_SECTORS.forEach(s=>totals[s.key]={load:0,cap:0});
-  Object.entries(globalCTMap).forEach(([ct,load])=>{
+  Object.entries(globalCTMap).forEach(([ct,val])=>{
     const sec=getSectorForCT(ct);
-    if(sec&&totals[sec.key]){totals[sec.key].load+=load;totals[sec.key].cap+=capMin(ct);}
+    if(sec&&totals[sec.key]){totals[sec.key].load+=ctLoad(val);totals[sec.key].cap+=capMin(ct);}
   });
 
   const grid=document.createElement('div');grid.className='fab-sector-grid';
@@ -1303,17 +1318,17 @@ function renderFabSectorDetail(sectorKey,filterStatus='ALL',searchTerm=''){
   const sectorDef=FAB_SECTORS.find(s=>s.key===sectorKey);
   const allEntries=Object.entries(globalCTMap)
     .filter(([ct])=>sectorDef&&sectorDef.match?sectorDef.match(ct):ct.startsWith(sectorKey))
-    .sort((a,b)=>b[1]-a[1]);
-  const maxLoad=allEntries[0]?.[1]||1;
-  const entries=allEntries.filter(([ct,load])=>{
-    const cap=capMin(ct),pct=cap>0?Math.round(load/cap*100):0;
+    .sort((a,b)=>ctLoad(b[1])-ctLoad(a[1]));
+  const maxLoad=ctLoad(allEntries[0]?.[1])||1;
+  const entries=allEntries.filter(([ct,val])=>{
+    const load=ctLoad(val),cap=capMin(ct),pct=cap>0?Math.round(load/cap*100):0;
     const ms=filterStatus==='ALL'||semTxt(pct)===filterStatus;
     const ss=!searchTerm||ct.toLowerCase().includes(searchTerm.toLowerCase())||(CT_NAMES[ct]||'').toLowerCase().includes(searchTerm.toLowerCase());
     return ms&&ss;
   });
 
-  const critico=allEntries.filter(([ct,l])=>{const c=capMin(ct);return c>0&&Math.round(l/c*100)>=100;}).length;
-  const alerta=allEntries.filter(([ct,l])=>{const c=capMin(ct);const p=c>0?Math.round(l/c*100):0;return p>=80&&p<100;}).length;
+  const critico=allEntries.filter(([ct,v])=>{const c=capMin(ct);return c>0&&Math.round(ctLoad(v)/c*100)>=100;}).length;
+  const alerta=allEntries.filter(([ct,v])=>{const c=capMin(ct);const p=c>0?Math.round(ctLoad(v)/c*100):0;return p>=80&&p<100;}).length;
   const sumBar=document.createElement('div');
   sumBar.style.cssText='display:flex;gap:16px;padding:7px 16px;border-bottom:1px solid var(--border);background:var(--s1);flex-shrink:0;font-family:JetBrains Mono,monospace;font-size:11px;';
   sumBar.innerHTML=`<span style="color:var(--text3)">${entries.length} de ${allEntries.length} CTs</span><span style="color:var(--red)">● ${critico} Crítico</span><span style="color:var(--yellow)">● ${alerta} Alerta</span><span style="color:var(--green)">● ${allEntries.length-critico-alerta} OK</span>`;
@@ -1323,10 +1338,17 @@ function renderFabSectorDetail(sectorKey,filterStatus='ALL',searchTerm=''){
   const tbl=document.createElement('table');tbl.className='ctt';tbl.style.width='100%';
   tbl.innerHTML=`<colgroup><col style="width:220px"><col style="width:90px"><col style="width:80px"><col style="width:60px"><col style="width:68px"><col style="width:52px"><col style="width:62px"><col style="width:72px"><col style="width:100px"><col style="width:72px"><col style="width:84px"></colgroup><thead><tr><th>CT</th><th>Carga</th><th>Cap.</th><th style="text-align:center">Turnos</th><th style="text-align:center">H/Turno</th><th style="text-align:center">Dias</th><th style="text-align:center">Efic %</th><th>%</th><th>Ocupação</th><th>Status</th><th style="text-align:right">Ações</th></tr></thead>`;
   const tbody=document.createElement('tbody');
-  entries.forEach(([ct,load])=>{
+  entries.forEach(([ct,val])=>{
+    const load=ctLoad(val),setup=ctSetup(val),proc=load-setup;
     const s=defS(ct),cap=capMin(ct),pct=cap>0?Math.round(load/cap*100):0;
     const col=semC(pct),bw=Math.min(pct,100),name=CT_NAMES[ct]||'';
     const isCustom=ctSets[ct]&&Object.keys(ctSets[ct]).some(k=>k!=='hc');
+    const hasSetup=setup>0;
+    const procW=cap>0?Math.min(proc/cap*100,100):0;
+    const setupW=cap>0?Math.min(setup/cap*100,Math.max(0,100-procW)):0;
+    const barHtml=hasSetup
+      ?`<div class="ct-bar-bg" style="width:100%"><div style="display:flex;height:100%;border-radius:4px;overflow:hidden"><div style="width:${procW}%;background:${col}"></div><div style="width:${setupW}%;background:#f59e0b" title="Setup: ${fmtH(setup)}"></div></div></div>`
+      :`<div class="ct-bar-bg" style="width:100%"><div class="ct-bar-fill" style="width:${bw}%;background:${col};border-radius:4px"></div></div>`;
     const tr=document.createElement('tr');tr.className='ct-main-tr';tr.style.borderBottom='1px solid var(--border2)';
     tr.innerHTML=`
       <td><div class="ct-name" style="color:var(--accent3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${ct}</div><div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${CT_NAMES[ct]||''}</div></td>
@@ -1337,7 +1359,7 @@ function renderFabSectorDetail(sectorKey,filterStatus='ALL',searchTerm=''){
       <td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center" data-field="dias">${s.dias}</td>
       <td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center" data-field="efic">${s.efic}</td>
       <td class="ct-pct" style="color:${col}">${pct}%</td>
-      <td><div class="ct-bar-bg" style="width:100%"><div class="ct-bar-fill" style="width:${bw}%;background:${col};border-radius:4px"></div></div></td>
+      <td>${barHtml}</td>
       <td class="ct-status" style="color:${col}">${semTxt(pct)}</td>
       <td style="white-space:nowrap;text-align:right">
         <span class="det-open" style="cursor:pointer;color:var(--text3);font-size:13px;margin-right:6px" data-ct="${ct}">▶</span>
@@ -1396,7 +1418,22 @@ function openDetail(ct,load,cap,pct,sectorClass){
               <td style="font-family:JetBrains Mono,monospace;font-size:10px;text-align:right;color:var(--text3)">${item.indirUnit.toFixed(3)}</td>
               <td style="font-family:JetBrains Mono,monospace;font-size:10px;text-align:right;color:var(--text2)">${item.mins.toFixed(1)}<div style="height:3px;background:var(--s4);border-radius:1px;margin-top:2px"><div style="height:100%;width:${bw}%;background:var(--accent2);border-radius:1px"></div></div></td>
               <td style="font-family:JetBrains Mono,monospace;font-size:10px;text-align:right;color:var(--accent3)">${fmtH(item.mins)}</td></tr>`;
-          }).join('')}</tbody>
+          }).join('')}
+          ${(()=>{
+            const setupMin=CT_SETUP_MIN[ct];
+            if(!setupMin||!sorted.length)return'';
+            const totalSetup=sorted.length*setupMin;
+            return`<tr style="border-top:1px solid var(--border2);background:rgba(245,158,11,.06)">
+              <td colspan="2" style="font-family:JetBrains Mono,monospace;font-size:9px;color:#f59e0b;padding:5px 8px">
+                ⚙ SETUP &nbsp;·&nbsp; ${sorted.length} itens × ${setupMin}min = ${fmtH(totalSetup)}
+              </td>
+              <td style="font-family:JetBrains Mono,monospace;font-size:9px;color:#f59e0b;text-align:right">${sorted.length}</td>
+              <td style="font-family:JetBrains Mono,monospace;font-size:9px;color:#f59e0b;text-align:right">${setupMin}</td>
+              <td style="font-family:JetBrains Mono,monospace;font-size:9px;color:#f59e0b;text-align:right">${totalSetup.toFixed(0)}</td>
+              <td style="font-family:JetBrains Mono,monospace;font-size:9px;color:#f59e0b;text-align:right;font-weight:700">${fmtH(totalSetup)}</td>
+            </tr>`;
+          })()}
+          </tbody>
         </table>`:'<div style="color:var(--text3);font-size:11px;padding:12px 0">Nenhum componente</div>'}
       </div>`;
     document.getElementById('detClose')?.addEventListener('click',()=>{panel.classList.add('closed');selectedCT=null;});
@@ -1867,12 +1904,12 @@ let gargaloFilter='all'; // all | gargalos
 let rankingOpen=false;
 
 function buildExecStats(){
-  // Collect all CT loads
-  const ctLoads=Object.entries(globalCTMap).map(([ct,load])=>{
+  const ctLoads=Object.entries(globalCTMap).map(([ct,val])=>{
+    const load=ctLoad(val),setup=ctSetup(val);
     const cap=capMin(ct);
     const pct=cap>0?Math.round(load/cap*100):0;
     const excess=Math.max(0,load-cap);
-    return{ct,load,cap,pct,excess};
+    return{ct,load,setup,cap,pct,excess};
   }).filter(x=>x.cap>0);
 
   const critical=ctLoads.filter(x=>x.pct>=100);
