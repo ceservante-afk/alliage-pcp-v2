@@ -864,13 +864,20 @@ async function init(){
   try{
     const ctNamesData=await api('/api/roteiro/ct_names');
     CT_NAMES=ctNamesData;
+    // Virtual CTs from galva split — add display names if not in SAP
+    if(!CT_NAMES['GALV-ANOD'])CT_NAMES['GALV-ANOD']='GALVANOPLASTIA - ANODIZAÇÃO';
+    if(!CT_NAMES['GALV-ZINC'])CT_NAMES['GALV-ZINC']='GALVANOPLASTIA - ZINCO';
+    if(!CT_NAMES['GALV-TRATAR'])CT_NAMES['GALV-TRATAR']='GALVANOPLASTIA - A TRATAR';
     const paLinhaData=await api('/api/bom/pa_linha');
     PA_LINHA=paLinhaData;
     let ctiData;
     try{ctiData=await fetch('/static/cti.json').then(r=>{if(!r.ok)throw new Error();return r.json();});}
     catch(e){ctiData=await api('/api/roteiro/cti');}
     CTI=ctiData;
-    buildCTIIndex(); // build mat→[{ct,indir,qty_base}] index for fast lookup
+    // Load galva map (mat → GALV-ANOD | GALV-ZINC)
+    try{GALV_MAP=await fetch('/static/galva_map.json').then(r=>r.ok?r.json():{});}
+    catch(e){console.warn('galva_map.json not found, using GALV-001 for all');GALV_MAP={};}
+    buildCTIIndex(); // build mat→[{ct,indir,qty_base}] index with galva redirect
     document.getElementById('rCTCount').textContent=Object.keys(CTI).length;
   }catch(e){console.warn('Static data load error:',e);}
 
@@ -963,6 +970,9 @@ function renderPills(ctMap){
 const BOM_CACHE={};
 // Inverted index: mat → [{ct, indir, qty_base}] — built once after CTI loads
 let CTI_BY_MAT={};
+// Galvanoplastia map: mat → 'GALV-ANOD' | 'GALV-ZINC' (loaded from static JSON)
+// Materials in GALV-001 but NOT in map → 'GALV-TRATAR'
+let GALV_MAP={};
 
 function buildCTIIndex(){
   CTI_BY_MAT={};
@@ -970,7 +980,12 @@ function buildCTIIndex(){
     for(const op of ops){
       const m=op.mat;
       if(!CTI_BY_MAT[m])CTI_BY_MAT[m]=[];
-      CTI_BY_MAT[m].push({ct, indir:op.indir, qty_base:op.qty_base||1});
+      // Redirect GALV-001 entries based on GALV_MAP
+      let resolvedCT=ct;
+      if(ct==='GALV-001'){
+        resolvedCT=GALV_MAP[m]||(Object.keys(GALV_MAP).length>0?'GALV-TRATAR':'GALV-001');
+      }
+      CTI_BY_MAT[m].push({ct:resolvedCT, indir:op.indir, qty_base:op.qty_base||1});
     }
   }
 }
@@ -2028,4 +2043,3 @@ checkAutoLogin();
 </div>
 </body>
 </html>
-
