@@ -69,6 +69,8 @@ class LoginRequest(BaseModel):
 class RegisterRequest(BaseModel):
     username: str
     password: str
+    role: Optional[str] = "viewer"
+    status: Optional[str] = "pending"
 
 class PatchUserRequest(BaseModel):
     status: Optional[str] = None   # 'active' | 'pending' | 'blocked'
@@ -95,23 +97,28 @@ async def login(req: LoginRequest):
 
 
 @router.post("/register")
-async def register(req: RegisterRequest):
+async def register(req: RegisterRequest, authorization: str = Header("")):
     username = req.username.strip().lower()
     if len(username) < 3:
         raise HTTPException(status_code=400, detail="Usuário deve ter ao menos 3 caracteres")
     if len(req.password) < 4:
         raise HTTPException(status_code=400, detail="Senha deve ter ao menos 4 caracteres")
+    # If caller is admin, allow setting role/status directly
+    token = authorization.replace("Bearer ", "").strip()
+    caller = _sessions.get(token)
+    role = req.role if (caller and caller["role"] == "admin") else "viewer"
+    status = req.status if (caller and caller["role"] == "admin") else "pending"
     try:
         execute(
-            "INSERT INTO pcp_users (username, password_hash, role, status) VALUES (%s, %s, 'viewer', 'pending')",
-            (username, _hash(req.password)),
+            "INSERT INTO pcp_users (username, password_hash, role, status) VALUES (%s, %s, %s, %s)",
+            (username, _hash(req.password), role, status),
             fetch=False
         )
     except Exception as e:
         if "unique" in str(e).lower() or "duplicate" in str(e).lower():
             raise HTTPException(status_code=409, detail="Usuário já existe")
         raise HTTPException(status_code=500, detail=str(e))
-    return {"detail": "Cadastro solicitado. Aguarde aprovação do administrador."}
+    return {"detail": "ok"}
 
 
 @router.post("/logout")
