@@ -986,9 +986,11 @@ async function getBOMTree(mat){
 function ctLoad(val){return typeof val==='object'&&val!==null?(val.load_min||0):parseFloat(val)||0;}
 function ctSetup(val){return typeof val==='object'&&val!==null?(val.setup_min||0):0;}
 function ctProcess(val){return ctLoad(val)-ctSetup(val);}
-  'ESTA-009':30,  // 15min × 2
-  'ESTA-033':30,  // 15min × 2
-  'ESTA-020':60,  // 30min × 2
+// Setup time (min) por item distinto = 2 setups × min/setup
+const CT_SETUP_MIN={
+  'ESTA-009':30,
+  'ESTA-033':30,
+  'ESTA-020':60,
   'ESTA-028':60,
   'ESTA-032':60,
 };
@@ -2026,3 +2028,4 @@ checkAutoLogin();
 </div>
 </body>
 </html>
+
