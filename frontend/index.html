@@ -37,7 +37,7 @@ body{background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;di
 .profile-badge.admin{background:rgba(37,99,168,.2);border:1px solid var(--accent2);color:var(--accent3);}
 .profile-badge.viewer{background:rgba(74,106,130,.15);border:1px solid var(--border2);color:var(--text2);}
 .profile-badge.visitor{background:rgba(74,106,130,.1);border:1px solid var(--border2);color:var(--text3);}
-.admin-users-btn{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.08em;padding:2px 10px;border:1px solid var(--border2);background:transparent;color:var(--text3);cursor:pointer;border-radius:2px;transition:all .15s;display:none;}
+.admin-users-btn{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.08em;padding:2px 10px;border:1px solid var(--border2);background:transparent;color:var(--text3);cursor:pointer;border-radius:2px;transition:all .15s;}
 .admin-users-btn:hover{border-color:var(--accent2);color:var(--accent3);}
 .visitor-overlay{position:fixed;inset:0;z-index:0;pointer-events:none;}
 
@@ -311,7 +311,7 @@ table.ctt th{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--te
     <div class="tstat">Roteiros: <b id="sRot">—</b></div>
     <div class="tstat" style="display:none"><b id="sProgN">0</b></div>
     <span id="profileBadge" class="profile-badge" onclick="doLogout()" title="Clique para sair"></span>
-    <button id="adminUsersBtn" class="admin-users-btn" onclick="openAdminUsers()" title="Gerenciar usuários">⚙ USUÁRIOS</button>
+    <button id="adminUsersBtn" class="admin-users-btn" onclick="openAdminUsers()" title="Gerenciar usuários" style="display:none">⚙ USUÁRIOS</button>
   </div>
 </div>
 
@@ -504,7 +504,10 @@ function _activateSession(token,username,role){
   applyRoleRestrictions();
   const adminBtn=document.getElementById('adminUsersBtn');
   if(adminBtn)adminBtn.style.display=isAdmin()?'':'none';
-  init();
+  await init();
+  // Re-apply after init in case something reset it
+  const adminBtn2=document.getElementById('adminUsersBtn');
+  if(adminBtn2)adminBtn2.style.display=isAdmin()?'':'none';
 }
 
 async function doLogin(){
