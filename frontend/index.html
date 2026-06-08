@@ -797,7 +797,7 @@ function setHorizon(h){
   applyHorizon();
 }
 
-function defS(ct){return{turnos:ctSets[ct]?.turnos??1,hturno:ctSets[ct]?.hturno??8,dias:ctSets[ct]?.dias??5,efic:ctSets[ct]?.efic??85};}
+function defS(ct){return{turnos:ctSets[ct]?.turnos??1,hturno:ctSets[ct]?.hturno??8.8,dias:ctSets[ct]?.dias??5,efic:ctSets[ct]?.efic??85};}
 function capMin(ct){const s=defS(ct);return s.turnos*s.hturno*s.dias*(s.efic/100)*60;}
 function saveCtSets(){try{localStorage.setItem('pcp_cts_v2',JSON.stringify(ctSets));}catch(e){}}
 
@@ -885,6 +885,14 @@ async function init(){
     updateProgCounter();
     renderProgGrid();
     renderPAList();
+    // Recalculate in background — CTI index is ready at this point
+    calcAll().then(()=>{
+      renderProgGrid();
+      // Se estiver na aba Consolidado, atualizar também
+      if(document.getElementById('sConsol')?.classList.contains('on')){
+        renderConsol();
+      }
+    });
   }
 
   setupEvents();
@@ -974,6 +982,12 @@ async function getBOMTree(mat){
   return tree;
 }
 
+// Setup time (min/peça) por CT de solda elétrica
+const CT_SETUP_MIN={
+  'ESTA-009':30,'ESTA-033':30,
+  'ESTA-020':15,'ESTA-028':15,'ESTA-032':15,
+};
+
 function explodeTree(node, qtyPA, compMap){
   if(!node||!node.children)return;
   for(const child of node.children){
@@ -985,12 +999,13 @@ function explodeTree(node, qtyPA, compMap){
     if(opsForMat){
       for(const{ct,indir,qty_base} of opsForMat){
         const indirUnit=indir/qty_base;
-        const mins=directQty*indirUnit;
+        const setupMin=CT_SETUP_MIN[ct]||0;
+        const mins=directQty*(indirUnit+setupMin);
         if(!compMap[ct])compMap[ct]=[];
         let entry=compMap[ct].find(e=>e.mat===mat);
         if(!entry){
           entry={mat,desc:child.desc||'',tipo:child.tipo||'',
-                 accQ:directQty,qtyTotal:directQty,indirUnit,mins};
+                 accQ:directQty,qtyTotal:directQty,indirUnit:indirUnit+setupMin,mins};
           compMap[ct].push(entry);
         } else {
           entry.qtyTotal+=directQty;
