@@ -491,7 +491,7 @@ function _setLoginErr(msg){
   if(el){el.textContent=msg;setTimeout(()=>el.textContent='',3500);}
 }
 
-function _activateSession(token,username,role){
+async function _activateSession(token,username,role){
   authToken=token;currentUser=username;currentRole=role;
   sessionStorage.setItem('pcp_token',token);
   sessionStorage.setItem('pcp_user',username);
@@ -520,7 +520,7 @@ async function doLogin(){
     const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:user,password:pwd})});
     const d=await r.json();
     if(!r.ok){_setLoginErr(d.detail||'Erro ao entrar.');document.getElementById('loginPwd').value='';return;}
-    _activateSession(d.token,d.username,d.role);
+    await _activateSession(d.token,d.username,d.role);
   }catch(e){_setLoginErr('Erro de conexão.');}
   finally{btn.textContent='Entrar';btn.disabled=false;}
 }
@@ -582,12 +582,12 @@ function applyRoleRestrictions(){
   document.head.appendChild(style);
 }
 
-function checkAutoLogin(){
+async function checkAutoLogin(){
   const savedToken=sessionStorage.getItem('pcp_token')||'';
   const savedUser=sessionStorage.getItem('pcp_user')||'';
   const savedRole=sessionStorage.getItem('pcp_role')||'';
   if(['admin','viewer','visitor'].includes(savedRole)){
-    _activateSession(savedToken,savedUser,savedRole);return true;
+    await _activateSession(savedToken,savedUser,savedRole);return true;
   }
   setTimeout(()=>document.getElementById('loginUser')?.focus(),100);
   document.getElementById('loginPwd')?.addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
