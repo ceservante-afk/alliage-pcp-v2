@@ -19,7 +19,32 @@
 html,body{height:100%;overflow:hidden;}
 body{background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;display:flex;flex-direction:column;}
 
-/* LOGIN */
+/* SLICER */
+.slicer-bar{padding:6px 16px;border-bottom:1px solid var(--border);background:var(--s1);display:flex;align-items:center;gap:12px;flex-shrink:0;}
+.slicer-label{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;white-space:nowrap;}
+.slicer-date{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--accent3);white-space:nowrap;}
+.slicer-days{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text2);white-space:nowrap;padding:2px 8px;border:1px solid var(--border2);background:var(--bg);}
+.slicer-track{flex:1;position:relative;height:20px;display:flex;align-items:center;min-width:120px;}
+.slicer-rail{position:absolute;left:0;right:0;height:3px;background:var(--border2);border-radius:2px;}
+.slicer-fill{position:absolute;height:3px;background:var(--accent2);border-radius:2px;}
+.slicer-thumb{position:absolute;width:12px;height:12px;border-radius:50%;background:var(--accent2);border:2px solid var(--s1);cursor:ew-resize;transform:translateX(-50%);top:50%;margin-top:-6px;transition:background .1s;}
+.slicer-thumb:hover{background:var(--accent3);}
+.weekend-alert{font-family:'JetBrains Mono',monospace;font-size:9px;color:#f59e0b;white-space:nowrap;padding:2px 8px;border:1px solid rgba(245,158,11,.3);background:rgba(245,158,11,.08);}
+
+/* PA CARDS */
+.pa-cards-container{padding:8px 16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px;}
+.pa-card{background:var(--s2);border:1px solid var(--border);border-top:2px solid var(--accent2);padding:8px 10px;cursor:pointer;transition:border-color .15s;}
+.pa-card:hover{border-color:var(--accent2);}
+.pa-card.expanded{border-bottom-color:transparent;}
+.pa-card-header{display:flex;align-items:flex-start;gap:6px;}
+.pa-card-code{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);}
+.pa-card-name{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.pa-card-qty{font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:800;color:var(--text);}
+.pa-card-dates{background:var(--bg);border:1px solid var(--border);border-top:none;padding:6px 10px;display:none;}
+.pa-card-dates.open{display:block;}
+.pa-date-row{font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 0;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center;}
+.pa-date-row:last-child{border-bottom:none;}
+.pa-date-row.weekend{color:#f59e0b;background:rgba(245,158,11,.07);padding:2px 4px;}
 #loginScreen{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:0;}
 .login-box{background:var(--s1);border:1px solid var(--border2);padding:36px 40px;width:320px;display:flex;flex-direction:column;gap:16px;}
 .login-logo{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.22em;color:var(--text3);text-transform:uppercase;margin-bottom:4px;}
@@ -351,6 +376,27 @@ table.ctt th{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--te
       <button class="calc-all" id="calcAll">▶ Calcular Tudo</button>
       <button class="clear-btn" id="clearProg">✕ Limpar</button>
     </div>
+    <div class="slicer-bar" id="slicerBarProg" style="display:none">
+      <span class="slicer-label">Período</span>
+      <span class="slicer-date" id="slicerStartLbl">—</span>
+      <div class="slicer-track" id="slicerTrack" style="min-width:160px">
+        <div class="slicer-rail"></div>
+        <div class="slicer-fill" id="slicerFill"></div>
+        <div class="slicer-thumb" id="slicerThumbL" data-t="start"></div>
+        <div class="slicer-thumb" id="slicerThumbR" data-t="end"></div>
+      </div>
+      <span class="slicer-date" id="slicerEndLbl">—</span>
+      <span class="slicer-days" id="slicerDaysLbl">0d úteis</span>
+      <span class="weekend-alert" id="weekendAlert" style="display:none">⚠ datas em fim de semana</span>
+    </div>
+    <div id="paCardsWrap" style="display:none;overflow-y:auto;max-height:200px;border-bottom:1px solid var(--border);">
+      <div style="padding:6px 16px;border-bottom:1px solid var(--border);background:var(--s1);display:flex;align-items:center;gap:8px;cursor:pointer;" id="paCardsToggle" onclick="togglePACards()">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);transition:transform .2s" id="paCardsArrow">▼</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em">Resumo da Programação</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-left:auto" id="paCardsSummary"></span>
+      </div>
+      <div id="paCardsBody" style="display:none"></div>
+    </div>
     <div class="prog-wrap" id="progWrap">
       <div class="prog-empty"><div class="prog-empty-icon">⬡</div><div>← Use a lista à esquerda para adicionar PAs à programação</div></div>
     </div>
@@ -364,6 +410,19 @@ table.ctt th{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--te
       <div class="consol-title">Capacidade de Fabricação</div>
       <div class="consol-sub" id="consolSub">—</div>
       <button class="recalc" id="recalcBtn">↺ Recalcular</button>
+    </div>
+    <div class="slicer-bar" id="slicerBarConsol" style="display:none">
+      <span class="slicer-label">Período</span>
+      <span class="slicer-date" id="slicerStartLbl2">—</span>
+      <div class="slicer-track" id="slicerTrack2" style="min-width:160px">
+        <div class="slicer-rail"></div>
+        <div class="slicer-fill" id="slicerFill2"></div>
+        <div class="slicer-thumb" id="slicerThumbL2" data-t="start"></div>
+        <div class="slicer-thumb" id="slicerThumbR2" data-t="end"></div>
+      </div>
+      <span class="slicer-date" id="slicerEndLbl2">—</span>
+      <span class="slicer-days" id="slicerDaysLbl2">0d úteis</span>
+      <span class="weekend-alert" id="weekendAlert2" style="display:none">⚠ datas em fim de semana</span>
     </div>
     <div class="exec-panel" id="execPanel">
       <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3)">Calcule a programação para ver o painel executivo</div>
@@ -732,53 +791,105 @@ async function adminDelete(id,username){
   refreshAdminUsers();
 }
 
-// ── HORIZON STATE ─────────────────────────────────────────────────────
-let PROG_DATA=[];   // full imported program: [{mat, qty, date, pa}]
-let HORIZON='week'; // week|fortnight|month|full
-let HORIZON_DAYS={week:5,fortnight:10,month:22,full:0}; // 0=auto
-let HORIZON_LABELS={week:'SEMANAL',fortnight:'QUINZENAL',month:'MENSAL',full:'PERÍODO COMPLETO'};
+// ── SLICER / PERIOD STATE ─────────────────────────────────────────────
+let PROG_DATA=[];
 let PROG_DATE_MIN=null, PROG_DATE_MAX=null;
+let SLICER_START=null, SLICER_END=null;
+
+function isWeekend(d){const day=d.getDay();return day===0||day===6;}
 
 function businessDaysBetween(d1,d2){
-  let count=0,cur=new Date(d1);
-  while(cur<=d2){const d=cur.getDay();if(d>0&&d<6)count++;cur.setDate(cur.getDate()+1);}
+  let count=0,cur=new Date(d1);cur.setHours(0,0,0,0);
+  const end=new Date(d2);end.setHours(23,59,59,999);
+  while(cur<=end){if(cur.getDay()>0&&cur.getDay()<6)count++;cur.setDate(cur.getDate()+1);}
   return count;
 }
 
-function getHorizonEnd(){
-  if(!PROG_DATE_MIN)return null;
-  const start=new Date(PROG_DATE_MIN);
-  if(HORIZON==='full')return new Date(PROG_DATE_MAX);
-  const days=HORIZON_DAYS[HORIZON];
-  let count=0,cur=new Date(start);
-  while(count<days){cur.setDate(cur.getDate()+1);const d=cur.getDay();if(d>0&&d<6)count++;}
-  return cur;
+function getHorizonDays(){
+  if(!SLICER_START||!SLICER_END)return 5;
+  return Math.max(1,businessDaysBetween(SLICER_START,SLICER_END));
 }
 
-function getHorizonDays(){
-  if(HORIZON==='full'){
-    if(!PROG_DATE_MIN||!PROG_DATE_MAX)return 5;
-    return Math.max(1,businessDaysBetween(PROG_DATE_MIN,PROG_DATE_MAX));
-  }
-  // For fixed horizons, also cap at available period if data was imported
-  if(PROG_DATE_MIN&&PROG_DATE_MAX){
-    const avail=Math.max(1,businessDaysBetween(PROG_DATE_MIN,PROG_DATE_MAX));
-    return Math.min(HORIZON_DAYS[HORIZON],avail);
-  }
-  return HORIZON_DAYS[HORIZON];
+function initSlicer(){
+  if(!PROG_DATE_MIN||!PROG_DATE_MAX)return;
+  if(!SLICER_START)SLICER_START=new Date(PROG_DATE_MIN);
+  if(!SLICER_END)SLICER_END=new Date(PROG_DATE_MAX);
+  updateSlicerUI();
+  ['','2'].forEach(sfx=>setupSlicerDrag(sfx));
+  document.getElementById('slicerBarProg')?.style.removeProperty('display');
+  document.getElementById('slicerBarConsol')?.style.removeProperty('display');
+  document.getElementById('paCardsWrap')?.style.removeProperty('display');
+}
+
+function updateSlicerUI(){
+  if(!PROG_DATE_MIN||!PROG_DATE_MAX||!SLICER_START||!SLICER_END)return;
+  const total=PROG_DATE_MAX-PROG_DATE_MIN||1;
+  const lPct=Math.max(0,Math.min(100,Math.round((SLICER_START-PROG_DATE_MIN)/total*100)));
+  const rPct=Math.max(0,Math.min(100,Math.round((SLICER_END-PROG_DATE_MIN)/total*100)));
+  const fmt=d=>d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+  const days=getHorizonDays();
+  const hasWeekend=PROG_DATA.some(x=>{const d=new Date(x.date);return d>=SLICER_START&&d<=SLICER_END&&isWeekend(d);});
+  ['','2'].forEach(sfx=>{
+    const el=id=>document.getElementById(id+sfx);
+    const tL=el('slicerThumbL'),tR=el('slicerThumbR'),fill=el('slicerFill');
+    if(tL)tL.style.left=lPct+'%';
+    if(tR)tR.style.left=rPct+'%';
+    if(fill){fill.style.left=lPct+'%';fill.style.width=(rPct-lPct)+'%';}
+    const s=el('slicerStartLbl'),e=el('slicerEndLbl'),d=el('slicerDaysLbl'),w=el('weekendAlert');
+    if(s)s.textContent=fmt(SLICER_START);
+    if(e)e.textContent=fmt(SLICER_END);
+    if(d)d.textContent=days+'d úteis';
+    if(w)w.style.display=hasWeekend?'':'none';
+  });
+}
+
+function setupSlicerDrag(sfx){
+  const el=id=>document.getElementById(id+sfx);
+  const track=el('slicerTrack'),tL=el('slicerThumbL'),tR=el('slicerThumbR');
+  if(!track||!tL||!tR)return;
+  let dragging=null;
+  const getX=e=>{const r=track.getBoundingClientRect();return Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));};
+  const onMove=e=>{
+    if(!dragging)return;
+    const total=PROG_DATE_MAX-PROG_DATE_MIN||1;
+    const d=new Date(PROG_DATE_MIN.getTime()+getX(e)*total);
+    if(dragging==='start')SLICER_START=d>SLICER_END?new Date(SLICER_END):d;
+    else SLICER_END=d<SLICER_START?new Date(SLICER_START):d;
+    updateSlicerUI();
+    clearTimeout(_slicerDebounce);
+    _slicerDebounce=setTimeout(()=>applySlicerFilter(),200);
+  };
+  tL.addEventListener('mousedown',e=>{dragging='start';e.preventDefault();});
+  tR.addEventListener('mousedown',e=>{dragging='end';e.preventDefault();});
+  document.addEventListener('mousemove',onMove);
+  document.addEventListener('mouseup',()=>{dragging=null;});
+  tL.addEventListener('touchstart',e=>{dragging='start';e.preventDefault();},{passive:false});
+  tR.addEventListener('touchstart',e=>{dragging='end';e.preventDefault();},{passive:false});
+  document.addEventListener('touchmove',e=>{if(dragging)onMove(e.touches[0]);},{passive:false});
+  document.addEventListener('touchend',()=>{dragging=null;});
+}
+
+let _slicerDebounce=null;
+function applySlicerFilter(){
+  applyHorizon();
+  calcAll().then(()=>{
+    renderProgGrid();
+    renderPACards();
+    if(document.getElementById('sConsol')?.classList.contains('on'))renderConsol();
+  });
 }
 
 function applyHorizon(){
-  // Filter PROG_DATA by horizon end date, aggregate by mat
-  const end=getHorizonEnd();
+  const s=SLICER_START,e=SLICER_END;
   const agg={};
   for(const item of PROG_DATA){
-    if(end&&item.date>end)continue;
-    if(!agg[item.mat])agg[item.mat]={pa:item.pa,qty:0,dates:[]};
+    const d=new Date(item.date);d.setHours(12,0,0,0);
+    if(s&&d<new Date(s.getFullYear(),s.getMonth(),s.getDate()))continue;
+    if(e&&d>new Date(e.getFullYear(),e.getMonth(),e.getDate(),23,59))continue;
+    if(!agg[item.mat])agg[item.mat]={pa:item.pa,qty:0,lines:[]};
     agg[item.mat].qty+=item.qty;
-    agg[item.mat].dates.push(item.date);
+    agg[item.mat].lines.push({date:item.date,qty:item.qty});
   }
-  // Update queued — preserve ctMaps if qty unchanged
   const newQueued={};
   for(const[mat,data]of Object.entries(agg)){
     if(!data.pa)continue;
@@ -787,36 +898,54 @@ function applyHorizon(){
     newQueued[mat]={pa:data.pa,qty:data.qty,
       ctMap:sameQty?prev.ctMap:null,
       compMap:sameQty?prev.compMap:null,
-      date:data.dates[0]};
+      lines:data.lines};
   }
   queued=newQueued;
-  // Update CT capacity days from horizon
-  const hDays=getHorizonDays();
-  for(const ct of Object.keys(ctSets)){
-    if(ctSets[ct]._horizonLocked)continue;
-    ctSets[ct].dias=hDays;
-  }
+  window._slicerDays=getHorizonDays();
   updateProgCounter();renderProgGrid();renderPAList();
-  // Update horizon button UI
-  document.querySelectorAll('.hz-btn').forEach(b=>b.classList.toggle('active',b.dataset.h===HORIZON));
-  // Update days display
-  const hdEl=document.getElementById('horizonDays');
-  if(hdEl){
-    if(HORIZON==='full'&&PROG_DATE_MIN&&PROG_DATE_MAX){
-      const fmt=d=>d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
-      hdEl.textContent=fmt(PROG_DATE_MIN)+' → '+fmt(PROG_DATE_MAX);
-    } else {
-      hdEl.textContent=getHorizonDays()+'d úteis';
-    }
-  }
 }
 
-function setHorizon(h){
-  HORIZON=h;
-  applyHorizon();
+// PA Cards (Resumo da Programação dropdown)
+let _paCardsOpen=false;
+function togglePACards(){
+  _paCardsOpen=!_paCardsOpen;
+  const body=document.getElementById('paCardsBody');
+  const arrow=document.getElementById('paCardsArrow');
+  if(body)body.style.display=_paCardsOpen?'block':'none';
+  if(arrow)arrow.style.transform=_paCardsOpen?'rotate(180deg)':'';
+  if(_paCardsOpen)renderPACards();
 }
 
-function defS(ct){return{turnos:ctSets[ct]?.turnos??1,hturno:ctSets[ct]?.hturno??8.8,dias:ctSets[ct]?.dias??5,efic:ctSets[ct]?.efic??85};}
+function renderPACards(){
+  const body=document.getElementById('paCardsBody');
+  const summary=document.getElementById('paCardsSummary');
+  if(!body)return;
+  const items=Object.entries(queued);
+  if(summary)summary.textContent=`${items.length} PAs · ${Math.round(items.reduce((s,[,v])=>s+v.qty,0)).toLocaleString('pt-BR')} peças`;
+  if(!items.length){body.innerHTML=`<div style="padding:12px 16px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3)">Nenhum PA programado no período.</div>`;return;}
+  const fmt=d=>d instanceof Date?d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',weekday:'short'}):'—';
+  body.innerHTML=`<div class="pa-cards-container">${items.map(([mat,{pa,qty,lines}])=>{
+    const datesHtml=(lines||[]).sort((a,b)=>new Date(a.date)-new Date(b.date)).map(l=>{
+      const d=new Date(l.date);
+      const wk=isWeekend(d);
+      return`<div class="pa-date-row${wk?' weekend':''}">${wk?'⚠ ':''}<span>${fmt(d)}</span><span style="margin-left:auto;font-weight:700">${Math.round(l.qty)} pc</span></div>`;
+    }).join('');
+    const hasWk=(lines||[]).some(l=>isWeekend(new Date(l.date)));
+    return`<div style="border:1px solid var(--border);border-top:2px solid ${hasWk?'#f59e0b':'var(--accent2)'};background:var(--s2);">
+      <div style="padding:7px 10px;cursor:pointer;" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--text3)">${mat}</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${pa?.desc||''}">${pa?.desc||mat}</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:800;color:var(--text);margin-top:2px">${Math.round(qty)} <span style="font-size:9px;font-weight:400;color:var(--text3)">pc</span></div>
+      </div>
+      <div style="display:none;padding:4px 10px 8px;border-top:1px solid var(--border)">${datesHtml}</div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function defS(ct){
+  const dias=window._slicerDays&&!isInactive(ct)?window._slicerDays:(ctSets[ct]?.dias??5);
+  return{turnos:ctSets[ct]?.turnos??1,hturno:ctSets[ct]?.hturno??8.8,dias,efic:ctSets[ct]?.efic??85};
+}
 function capMin(ct){if(isInactive(ct))return 0;const s=defS(ct);return s.turnos*s.hturno*s.dias*(s.efic/100)*60;}
 function saveCtSets(){try{localStorage.setItem('pcp_cts_v2',JSON.stringify(ctSets));}catch(e){}}
 
@@ -908,13 +1037,16 @@ async function init(){
 
   // Restore last saved programação
   if(loadProgData()){
+    SLICER_START=PROG_DATE_MIN?new Date(PROG_DATE_MIN):null;
+    SLICER_END=PROG_DATE_MAX?new Date(PROG_DATE_MAX):null;
+    window._slicerDays=getHorizonDays();
     updateProgCounter();
     renderProgGrid();
     renderPAList();
-    // Recalculate in background — CTI index is ready at this point
+    initSlicer();
     calcAll().then(()=>{
       renderProgGrid();
-      // Se estiver na aba Consolidado, atualizar também
+      renderPACards();
       if(document.getElementById('sConsol')?.classList.contains('on')){
         renderConsol();
       }
@@ -1691,32 +1823,25 @@ document.getElementById('xlsIn').addEventListener('change',function(e){
     PROG_DATA=newItems;
     PROG_DATE_MIN=new Date(Math.min(...newItems.map(x=>x.date)));
     PROG_DATE_MAX=new Date(Math.max(...newItems.map(x=>x.date)));
-
-    const hEnd=getHorizonEnd();
-    const totalDays=businessDaysBetween(PROG_DATE_MIN,PROG_DATE_MAX)||1;
-    const fmt=d=>d?d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit'}):'?';
+    // Reset slicer to full range on new import
+    SLICER_START=new Date(PROG_DATE_MIN);
+    SLICER_END=new Date(PROG_DATE_MAX);
+    window._slicerDays=getHorizonDays();
 
     // Show period info
     const pi2=document.getElementById('progPeriodInfo');
     if(pi2){const n=new Date();const lbl=n.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})+' '+n.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});pi2.style.display='';pi2.textContent='prog salva '+lbl;}
 
-    // Load all data directly into queued (no horizon filtering)
+    // Aggregate into queued
     queued={};
     for(const item of PROG_DATA){
       const mat=item.mat;
-      if(!queued[mat])queued[mat]={pa:item.pa,qty:0,ctMap:null,compMap:null};
-      else{queued[mat].qty+=item.qty;queued[mat].ctMap=null;queued[mat].compMap=null;}
-      queued[mat].qty+=item.qty - (queued[mat].qty===0?item.qty:0);
-    }
-    // Aggregate properly
-    queued={};
-    for(const item of PROG_DATA){
-      const mat=item.mat;
-      if(!queued[mat])queued[mat]={pa:item.pa,qty:item.qty,ctMap:null,compMap:null};
-      else queued[mat].qty+=item.qty;
+      if(!queued[mat])queued[mat]={pa:item.pa,qty:item.qty,ctMap:null,compMap:null,lines:[{date:item.date,qty:item.qty}]};
+      else{queued[mat].qty+=item.qty;queued[mat].lines.push({date:item.date,qty:item.qty});}
     }
     saveProgData();
-    updateProgCounter();renderProgGrid();renderPAList();
+    initSlicer();
+    updateProgCounter();renderProgGrid();renderPAList();renderPACards();
   };
   reader.readAsArrayBuffer(file);e.target.value='';
 });
