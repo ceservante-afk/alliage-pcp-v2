@@ -922,24 +922,67 @@ function renderPACards(){
   if(!body)return;
   const items=Object.entries(queued);
   if(summary)summary.textContent=`${items.length} PAs · ${Math.round(items.reduce((s,[,v])=>s+v.qty,0)).toLocaleString('pt-BR')} peças`;
-  if(!items.length){body.innerHTML=`<div style="padding:12px 16px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3)">Nenhum PA programado no período.</div>`;return;}
-  const fmt=d=>d instanceof Date?d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',weekday:'short'}):'—';
-  body.innerHTML=`<div class="pa-cards-container">${items.map(([mat,{pa,qty,lines}])=>{
-    const datesHtml=(lines||[]).sort((a,b)=>new Date(a.date)-new Date(b.date)).map(l=>{
-      const d=new Date(l.date);
-      const wk=isWeekend(d);
-      return`<div class="pa-date-row${wk?' weekend':''}">${wk?'⚠ ':''}<span>${fmt(d)}</span><span style="margin-left:auto;font-weight:700">${Math.round(l.qty)} pc</span></div>`;
+  if(!items.length){
+    body.innerHTML=`<div style="padding:12px 16px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3)">Nenhum PA programado no período.</div>`;
+    return;
+  }
+
+  // Group by linha
+  const byLinha={};
+  for(const[mat,data] of items){
+    const linha=PA_LINHA[mat]||'OUTROS';
+    if(!byLinha[linha])byLinha[linha]={qty:0,pas:[]};
+    byLinha[linha].qty+=data.qty;
+    byLinha[linha].pas.push({mat,data});
+  }
+  const linhas=Object.entries(byLinha).sort((a,b)=>a[0].localeCompare(b[0]));
+
+  const fmtDate=d=>{
+    if(!(d instanceof Date))d=new Date(d);
+    return d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',weekday:'short'});
+  };
+
+  body.innerHTML=linhas.map(([linha,{qty,pas}],li)=>{
+    const linhaId=`linha-${li}`;
+    const hasWkLinha=pas.some(({data})=>(data.lines||[]).some(l=>isWeekend(new Date(l.date))));
+    const pasHtml=pas.sort((a,b)=>(a.data.pa?.desc||a.mat).localeCompare(b.data.pa?.desc||b.mat)).map(({mat,data},pi)=>{
+      const paId=`pa-${li}-${pi}`;
+      const hasWkPA=(data.lines||[]).some(l=>isWeekend(new Date(l.date)));
+      const datesHtml=(data.lines||[]).sort((a,b)=>new Date(a.date)-new Date(b.date)).map(l=>{
+        const d=new Date(l.date);
+        const wk=isWeekend(d);
+        return`<div style="display:flex;gap:8px;padding:3px 8px 3px 16px;border-bottom:1px solid var(--border);font-family:'JetBrains Mono',monospace;font-size:9px;${wk?'color:#f59e0b;background:rgba(245,158,11,.06)':'color:var(--text3)'}">
+          ${wk?'⚠ ':''}<span>${fmtDate(d)}</span>
+          <span style="margin-left:auto;font-weight:700;color:${wk?'#f59e0b':'var(--text2)'}">${Math.round(l.qty)} pc</span>
+        </div>`;
+      }).join('');
+      return`<div>
+        <div onclick="(function(el){const next=el.nextElementSibling;const arr=el.querySelector('.pa-arr');next.style.display=next.style.display==='block'?'none':'block';arr.style.transform=next.style.display==='block'?'rotate(90deg)':''})(this)"
+          style="display:flex;align-items:center;gap:8px;padding:5px 8px 5px 12px;cursor:pointer;border-bottom:1px solid var(--border);background:var(--s1);">
+          <span class="pa-arr" style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--text3);transition:transform .15s">▶</span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--text3)">${mat}</div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;color:${hasWkPA?'#f59e0b':'var(--text2)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${data.pa?.desc||mat}</div>
+          </div>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:800;color:var(--text);white-space:nowrap">${Math.round(data.qty)} <span style="font-size:8px;font-weight:400;color:var(--text3)">pc</span></span>
+        </div>
+        <div style="display:none">${datesHtml}</div>
+      </div>`;
     }).join('');
-    const hasWk=(lines||[]).some(l=>isWeekend(new Date(l.date)));
-    return`<div style="border:1px solid var(--border);border-top:2px solid ${hasWk?'#f59e0b':'var(--accent2)'};background:var(--s2);">
-      <div style="padding:7px 10px;cursor:pointer;" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">
-        <div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--text3)">${mat}</div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${pa?.desc||''}">${pa?.desc||mat}</div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:800;color:var(--text);margin-top:2px">${Math.round(qty)} <span style="font-size:9px;font-weight:400;color:var(--text3)">pc</span></div>
+
+    return`<div style="border-bottom:2px solid var(--border);">
+      <div onclick="(function(el){const next=el.nextElementSibling;const arr=el.querySelector('.linha-arr');next.style.display=next.style.display==='block'?'none':'block';arr.style.transform=next.style.display==='block'?'rotate(90deg)':''})(this)"
+        style="display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;background:var(--s2);border-left:3px solid ${hasWkLinha?'#f59e0b':'var(--accent2)'};">
+        <span class="linha-arr" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--accent3);transition:transform .15s">▶</span>
+        <div style="flex:1;">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:var(--accent3);letter-spacing:.06em;text-transform:uppercase">${linha}</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-top:1px">${pas.length} PA${pas.length>1?'s':''}</div>
+        </div>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:800;color:var(--text)">${Math.round(qty)} <span style="font-size:9px;font-weight:400;color:var(--text3)">pc</span></span>
       </div>
-      <div style="display:none;padding:4px 10px 8px;border-top:1px solid var(--border)">${datesHtml}</div>
+      <div style="display:none">${pasHtml}</div>
     </div>`;
-  }).join('')}</div>`;
+  }).join('');
 }
 
 function defS(ct){
