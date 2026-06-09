@@ -988,6 +988,9 @@ function updateProgCounter(){
   document.getElementById('sProgN').textContent=pas+' PA / '+Math.round(pcs)+' pc';
   const ps=document.getElementById('progSummary');
   if(ps)ps.textContent=pas>0?pas+' PAs  ·  '+Math.round(pcs).toLocaleString('pt-BR')+' peças programadas':'';
+  // Show/hide resumo da programação
+  const wrap=document.getElementById('paCardsWrap');
+  if(wrap)wrap.style.display=pas>0?'':'none';
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────
@@ -1415,8 +1418,8 @@ function resetCT(ct){
 function renderFabSectorCards(){
   const body=document.getElementById('sectorBody');body.innerHTML='';
   const oldDet=document.getElementById('detPanel');if(oldDet)oldDet.remove();selectedCT=null;
-  const lc=document.getElementById('linhaCards');
-  if(lc){lc.style.removeProperty('display');lc.classList.add('expanded');const arr=document.getElementById('linhaArrow');if(arr)arr.classList.add('open');}
+  const lc=document.getElementById('paCardsWrap');
+  if(lc){lc.style.removeProperty('display');}
   const st=document.querySelector('.sector-tabs');if(st)st.style.display='';
 
   const totals={};FAB_SECTORS.forEach(s=>totals[s.key]={load:0,cap:0});
@@ -1464,7 +1467,7 @@ function renderFabSectorDetail(sectorKey,filterStatus='ALL',searchTerm=''){
   const sector=FAB_SECTORS.find(s=>s.key===sectorKey);
   const body=document.getElementById('sectorBody');body.innerHTML='';
   const oldDet=document.getElementById('detPanel');if(oldDet)oldDet.remove();selectedCT=null;
-  const lc=document.getElementById('linhaCards');if(lc){lc.style.removeProperty('display');lc.classList.remove('expanded');}
+  const lc=document.getElementById('paCardsWrap');if(lc){lc.style.display='none';}
   const st=document.querySelector('.sector-tabs');if(st)st.style.display='none';
 
   const backBar=document.createElement('div');
@@ -1616,71 +1619,7 @@ function openDetail(ct,load,cap,pct,sectorClass){
 
 // ── LINHA CARDS ───────────────────────────────────────────────────────
 function renderLinhaCards(){
-  const linhaData={};
-  for(const[num,{ctMap,qty}]of Object.entries(queued)){
-    if(!ctMap)continue;
-    const linha=PA_LINHA[num]||'OUTROS';
-    if(!linhaData[linha])linhaData[linha]={fabMins:0,montMins:0,qty:0,pas:0};
-    linhaData[linha].qty+=qty;
-    linhaData[linha].pas++;
-    for(const[ct,d]of Object.entries(ctMap)){
-      const load=typeof d==='object'?d.load_min:parseFloat(d)||0;
-      if(isFab(ct))linhaData[linha].fabMins+=load;
-      else linhaData[linha].montMins+=load;
-    }
-  }
-  // Sort alphabetically
-  const entries=Object.entries(linhaData).sort((a,b)=>a[0].localeCompare(b[0]));
-  const maxLoad=Math.max(...entries.map(([,d])=>d.fabMins+d.montMins),1);
-
-  let container=document.getElementById('linhaCards');
-  if(!container){
-    // Create toggle header
-    const toggle=document.createElement('div');
-    toggle.className='linha-toggle';
-    toggle.id='linhaToggle';
-    toggle.innerHTML=`<span class="linha-toggle-arrow" id="linhaArrow">▼</span>
-      <span class="linha-toggle-label">Resumo da Programação</span>
-      <span class="linha-toggle-summary" id="linhaSummary"></span>`;
-    toggle.addEventListener('click',toggleLinhaCards);
-    // Create cards container
-    container=document.createElement('div');container.id='linhaCards';
-    const st=document.querySelector('.sector-tabs')||document.querySelector('.consol-bottom');
-    if(st){st.parentNode.insertBefore(container,st);st.parentNode.insertBefore(toggle,container);}
-    // NOW elements are in DOM — safe to access by ID
-    container.classList.add('expanded');
-    const arr=document.getElementById('linhaArrow');if(arr)arr.classList.add('open');
-  }
-  if(!entries.length){container.style.maxHeight='0';container.classList.remove('expanded');return;}
-  container.style.removeProperty('display');
-
-  function fmt(m){
-    if(!m||m<1)return'—';
-    const h=Math.floor(m/60),mm=Math.round(m%60);
-    return h>0?h+'h '+String(mm).padStart(2,'0')+'m':mm+'m';
-  }
-
-  const totalQty=entries.reduce((s,[,d])=>s+d.qty,0);
-  const totalPAs=entries.reduce((s,[,d])=>s+d.pas,0);
-  const summary=document.getElementById('linhaSummary');
-  if(summary)summary.textContent=entries.length+' linhas · '+Math.round(totalQty).toLocaleString('pt-BR')+' peças · '+totalPAs+' PAs';
-  container.innerHTML=entries.map(([linha,d])=>`
-    <div style="background:var(--s2);border:1px solid var(--border);padding:7px 10px;border-top:2px solid var(--accent2);overflow:hidden;min-width:0;">
-      <div style="font-family:'JetBrains Mono',monospace;font-size:7px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${linha}">${linha}</div>
-      <div style="font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:800;color:var(--text);line-height:1">${Math.round(d.qty)}</div>
-      <div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--text3);margin-bottom:6px">pc · ${d.pas} PA</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:6px;">
-        <div>
-          <div style="font-family:'JetBrains Mono',monospace;font-size:7px;color:var(--text3);text-transform:uppercase;margin-bottom:1px">FAB</div>
-          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text2);font-weight:700">${fmt(d.fabMins)}</div>
-        </div>
-        <div>
-          <div style="font-family:'JetBrains Mono',monospace;font-size:7px;color:var(--text3);text-transform:uppercase;margin-bottom:1px">MONT</div>
-          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text2);font-weight:700">${fmt(d.montMins)}</div>
-        </div>
-      </div>
-      <div style="height:2px;background:var(--border2)"><div style="height:100%;width:${Math.round((d.fabMins+d.montMins)/maxLoad*100)}%;background:var(--accent2)"></div></div>
-    </div>`).join('');
+  renderPACards();
 }
 
 
