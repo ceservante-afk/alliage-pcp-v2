@@ -1801,17 +1801,32 @@ document.getElementById('xlsIn').addEventListener('change',function(e){
     const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:false,dateNF:'yyyy-mm-dd'});
     const rawRows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true});
     if(rows.length<2){alert('Arquivo vazio.');return;}
-    const hdr=rows[0].map(h=>String(h||'').toUpperCase());
 
-    // Detect columns
-    const dateI=hdr.findIndex(h=>h.includes('DATA')||h.includes('DATE'));
-    const matI=hdr.findIndex(h=>h.includes('COD')||h.includes('MATERIAL')||h.includes('PA'));
-    const qtyI=hdr.findIndex(h=>h.includes('FALTA')||h.includes('QTD')||h.includes('QUANT')||h.includes('QTY'));
-    const descI=hdr.findIndex(h=>h.includes('DESC'));
-    if(matI<0){alert('Coluna de material não encontrada.');return;}
+    // ── VALIDAÇÃO ESTRITA DO TEMPLATE ──────────────────────────────
+    const EXPECTED=['Data Programação','COD','Programado'];
+    const hdr=rows[0].map(h=>String(h||'').trim());
+
+    // Verificar número de colunas
+    const nonEmpty=hdr.filter(h=>h!=='');
+    if(nonEmpty.length!==3){
+      alert(`Estrutura inválida.\n\nEsperado: 3 colunas\nEncontrado: ${nonEmpty.length} colunas\n\nO arquivo deve ter exatamente as colunas:\n• Data Programação\n• COD\n• Programado`);
+      return;
+    }
+
+    // Verificar cabeçalhos exatos (case-sensitive)
+    for(let i=0;i<3;i++){
+      if(hdr[i]!==EXPECTED[i]){
+        alert(`Cabeçalho inválido na coluna ${i+1}.\n\nEsperado: "${EXPECTED[i]}"\nEncontrado: "${hdr[i]}"\n\nVerifique se o arquivo segue o modelo padrão.`);
+        return;
+      }
+    }
+
+    const dateI=0, matI=1, qtyI=2;
+    // ──────────────────────────────────────────────────────────────
 
     // Parse rows
     const newItems=[];
+    const skipped=[];
     rows.slice(1).forEach((row,i)=>{
       const matRaw=rawRows[i+1]?.[matI];
       const mat=String(matRaw||'').trim();
@@ -1819,41 +1834,41 @@ document.getElementById('xlsIn').addEventListener('change',function(e){
       const qty=Math.round(parseFloat(String(rawRows[i+1]?.[qtyI]||'0').replace(',','.'))||0);
       if(qty<=0)return;
       const pa=ALL_PAS.find(p=>p.mat===mat);
-      if(!pa)return;
+      if(!pa){skipped.push(mat);return;}
       // Parse date
       let date=null;
-      if(dateI>=0){
-        const dRaw=rawRows[i+1]?.[dateI];
-        if(dRaw instanceof Date)date=dRaw;
-        else if(typeof dRaw==='number'){
-          // Excel serial date
-          const d=new Date((dRaw-25569)*86400*1000);
-          date=new Date(d.getFullYear(),d.getMonth(),d.getDate());
-        } else if(typeof dRaw==='string'&&dRaw){
-          const p=dRaw.split(/[-\/]/);
-          if(p.length===3)date=new Date(p[0],p[1]-1,p[2]);
-        }
+      const dRaw=rawRows[i+1]?.[dateI];
+      if(dRaw instanceof Date)date=dRaw;
+      else if(typeof dRaw==='number'){
+        const d=new Date((dRaw-25569)*86400*1000);
+        date=new Date(d.getFullYear(),d.getMonth(),d.getDate());
+      } else if(typeof dRaw==='string'&&dRaw){
+        const p=dRaw.split(/[-\/]/);
+        if(p.length===3)date=new Date(p[0],p[1]-1,p[2]);
       }
       if(!date)date=new Date();
       newItems.push({mat,qty,date,pa});
     });
 
-    if(!newItems.length){alert('Nenhum PA reconhecido. Verifique as colunas.');return;}
+    if(!newItems.length){
+      alert('Nenhum PA reconhecido na planilha.\n\nVerifique se os códigos da coluna COD existem na base de PAs.');
+      return;
+    }
+    if(skipped.length>0){
+      console.warn(`[Import] ${skipped.length} códigos não reconhecidos:`,skipped.slice(0,10));
+    }
 
     // Add to PROG_DATA (replace existing)
     PROG_DATA=newItems;
     PROG_DATE_MIN=new Date(Math.min(...newItems.map(x=>x.date)));
     PROG_DATE_MAX=new Date(Math.max(...newItems.map(x=>x.date)));
-    // Reset slicer to full range on new import
     SLICER_START=new Date(PROG_DATE_MIN);
     SLICER_END=new Date(PROG_DATE_MAX);
     window._slicerDays=getHorizonDays();
 
-    // Show period info
     const pi2=document.getElementById('progPeriodInfo');
     if(pi2){const n=new Date();const lbl=n.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})+' '+n.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});pi2.style.display='';pi2.textContent='prog salva '+lbl;}
 
-    // Aggregate into queued
     queued={};
     for(const item of PROG_DATA){
       const mat=item.mat;
@@ -1863,6 +1878,7 @@ document.getElementById('xlsIn').addEventListener('change',function(e){
     saveProgData();
     initSlicer();
     updateProgCounter();renderProgGrid();renderPAList();renderPACards();
+    if(skipped.length>0)console.warn(`${skipped.length} itens ignorados (não encontrados na base de PAs).`);
   };
   reader.readAsArrayBuffer(file);e.target.value='';
 });
@@ -2174,3 +2190,4 @@ checkAutoLogin();
 </div>
 </body>
 </html>
+
