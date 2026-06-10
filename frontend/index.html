@@ -341,14 +341,14 @@ table.ctt th{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--te
 </div>
 
 <div class="tabs">
-  <div class="tab active" data-s="Prog">Programação</div>
-  <div class="tab" data-s="Consol">Consolidado CTs</div>
+  <div class="tab active" data-s="Params">Parâmetros</div>
+  <div class="tab" data-s="Prog">Programação</div>
+  <div class="tab" data-s="Consol">Análise Capacidade</div>
   <div class="tab" data-s="Roteiros">Roteiros por CT</div>
-  <div class="tab" data-s="Params">Parâmetros</div>
 </div>
 
 <!-- PROGRAMAÇÃO -->
-<div class="screen on" id="sProg">
+<div class="screen" id="sProg">
   <div class="sb">
     <div class="sb-head">
       <div class="sb-search">
@@ -389,13 +389,16 @@ table.ctt th{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--te
       <span class="slicer-days" id="slicerDaysLbl">0d úteis</span>
       <span class="weekend-alert" id="weekendAlert" style="display:none">⚠ datas em fim de semana</span>
     </div>
-    <div id="paCardsWrap" style="display:none;overflow-y:auto;max-height:200px;border-bottom:1px solid var(--border);">
-      <div style="padding:6px 16px;border-bottom:1px solid var(--border);background:var(--s1);display:flex;align-items:center;gap:8px;cursor:pointer;" id="paCardsToggle" onclick="togglePACards()">
-        <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);transition:transform .2s" id="paCardsArrow">▼</span>
-        <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em">Resumo da Programação</span>
-        <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-left:auto" id="paCardsSummary"></span>
+    <div id="paCardsWrap" style="display:none;border-bottom:1px solid var(--border);">
+      <div id="paCardsToggle" onclick="togglePACards()"
+        style="padding:8px 16px;background:var(--s1);display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;border-bottom:1px solid var(--border);transition:background .15s;"
+        onmouseenter="this.style.background='var(--s2)'" onmouseleave="this.style.background='var(--s1)'">
+        <svg id="paCardsArrowSvg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent2)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .2s;flex-shrink:0"><polyline points="6 9 12 15 18 9"/></svg>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;color:var(--text2);letter-spacing:.1em;text-transform:uppercase">Resumo da Programação</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-left:4px" id="paCardsSummary"></span>
+        <span style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--accent2);border:1px solid var(--accent2);padding:1px 6px;border-radius:2px;opacity:.7">clique para expandir</span>
       </div>
-      <div id="paCardsBody" style="display:none"></div>
+      <div id="paCardsBody" style="display:none;max-height:320px;overflow-y:auto;"></div>
     </div>
     <div class="prog-wrap" id="progWrap">
       <div class="prog-empty"><div class="prog-empty-icon">⬡</div><div>← Use a lista à esquerda para adicionar PAs à programação</div></div>
@@ -910,9 +913,11 @@ let _paCardsOpen=false;
 function togglePACards(){
   _paCardsOpen=!_paCardsOpen;
   const body=document.getElementById('paCardsBody');
-  const arrow=document.getElementById('paCardsArrow');
+  const arrow=document.getElementById('paCardsArrowSvg');
+  const hint=document.querySelector('#paCardsToggle span:last-child');
   if(body)body.style.display=_paCardsOpen?'block':'none';
-  if(arrow)arrow.style.transform=_paCardsOpen?'rotate(180deg)':'';
+  if(arrow)arrow.style.transform=_paCardsOpen?'rotate(180deg)':'rotate(0deg)';
+  if(hint)hint.style.display=_paCardsOpen?'none':'';
   if(_paCardsOpen)renderPACards();
 }
 
@@ -2075,56 +2080,13 @@ function buildExecStats(){
 function renderExecPanel(){
   let panel=document.getElementById('execPanel');
   if(!panel)return;
-  if(!Object.keys(globalCTMap).length){
-    panel.innerHTML='<div style="font-family:JetBrains Mono,monospace;font-size:10px;color:var(--text3);padding:8px">Calcule a programação para ver o painel executivo</div>';
-    return;
-  }
-  const{critical,warning,top,totalExcess,ranking}=buildExecStats();
-  const topPct=top?top.pct:0;
-  const topColor=topPct>=100?'#ef4444':topPct>=80?'#f59e0b':'#22c55e';
-  const excessH=Math.floor(totalExcess/60),excessM=Math.round(totalExcess%60);
-  const excessStr=excessH>0?excessH+'h '+String(excessM).padStart(2,'0')+'m':excessM+'m';
-
   panel.innerHTML=`
-    <div class="exec-card ${critical.length>0?'critical':'ok'}">
-      <div class="exec-label">CTs Críticos</div>
-      <div class="exec-value" style="color:${critical.length>0?'#ef4444':'#22c55e'}">${critical.length}</div>
-      <div class="exec-sub">${warning.length} em alerta</div>
-    </div>
-    <div class="exec-card ${topPct>=100?'critical':topPct>=80?'warning':'ok'}" style="cursor:pointer" onclick="document.getElementById('rankingPanel').classList.toggle('open');rankingOpen=!rankingOpen;">
-      <div class="exec-label">Maior Gargalo ▾</div>
-      <div class="exec-value" style="color:${topColor}">${top?top.ct:'—'}</div>
-      <div class="exec-sub">${topPct}% ocupação</div>
-    </div>
-    <div class="exec-card ${totalExcess>0?'critical':'ok'}">
-      <div class="exec-label">Excesso Total</div>
-      <div class="exec-value" style="color:${totalExcess>0?'#ef4444':'#22c55e'};font-size:14px">${totalExcess>0?'+'+excessStr:'0'}</div>
-      <div class="exec-sub">acima da capacidade</div>
-    </div>
     <div style="margin-left:auto;display:flex;align-items:center;gap:6px;">
       <div class="gargalo-filter">
         <button class="gf-btn ${gargaloFilter==='all'?'active':''}" onclick="setGargaloFilter('all')">TODOS</button>
         <button class="gf-btn ${gargaloFilter==='gargalos'?'active':''}" onclick="setGargaloFilter('gargalos')">GARGALOS</button>
       </div>
     </div>`;
-
-  // Ranking panel
-  let rPanel=document.getElementById('rankingPanel');
-  if(rPanel){
-    rPanel.innerHTML=`<div class="ranking-inner">${ranking.map((x,i)=>{
-      const exH=Math.floor(x.excess/60),exM=Math.round(x.excess%60);
-      const exStr=x.excess>0?'+'+(exH>0?exH+'h ':'')+exM+'m':'';
-      const col=x.pct>=100?'#ef4444':x.pct>=80?'#f59e0b':'#22c55e';
-      return`<div class="rank-item" onclick="openDetailFromRanking('${x.ct}',${x.load},${x.cap},${x.pct})">
-        <span class="rank-num">${i+1}</span>
-        <span class="rank-ct">${x.ct}</span>
-        <span style="font-size:8px;color:var(--text3);flex:1">${CT_NAMES[x.ct]?CT_NAMES[x.ct].slice(0,20):''}</span>
-        <span class="rank-pct" style="color:${col}">${x.pct}%</span>
-        ${exStr?`<span class="rank-excess">${exStr}</span>`:''}
-      </div>`;
-    }).join('')}</div>`;
-    if(rankingOpen)rPanel.classList.add('open');
-  }
 }
 
 function openDetailFromRanking(ct,load,cap,pct){
@@ -2160,7 +2122,7 @@ checkAutoLogin();
 
 
 <!-- ═══ TELA: PARÂMETROS ═══ -->
-<div class="screen" id="sParams">
+<div class="screen on" id="sParams">
   <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;background:var(--bg);">
     <div style="padding:10px 20px;border-bottom:1px solid var(--border);background:var(--s1);display:flex;align-items:center;gap:14px;flex-shrink:0;">
       <div style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.12em;color:var(--text2)">PARÂMETROS — HC / EFICIÊNCIA / HORAS</div>
