@@ -1069,6 +1069,7 @@ async function init(){
     try{ctiData=await fetch('/static/cti.json').then(r=>{if(!r.ok)throw new Error();return r.json();});}
     catch(e){ctiData=await api('/api/roteiro/cti');}
     CTI=ctiData;
+    _loadBOMCache(); // restore persisted BOMs before building index
     // Load galva map (mat → GALV-ANOD | GALV-ZINC)
     try{GALV_MAP=await fetch('/static/galva_map.json').then(r=>r.ok?r.json():{});}
     catch(e){console.warn('galva_map.json not found, using GALV-001 for all');GALV_MAP={};}
@@ -1165,7 +1166,36 @@ function renderPills(ctMap){
 
 // ── CALCULATE ─────────────────────────────────────────────────────────
 // BOM tree cache (client-side)
+// BOM cache — in-memory + localStorage (persistent across reloads)
 const BOM_CACHE={};
+const BOM_CACHE_KEY='pcp_bom_cache_v2';
+const BOM_CACHE_VER=2;
+
+function _loadBOMCache(){
+  try{
+    const raw=localStorage.getItem(BOM_CACHE_KEY);
+    if(!raw)return;
+    const obj=JSON.parse(raw);
+    if(obj.v!==BOM_CACHE_VER)return;
+    Object.assign(BOM_CACHE,obj.data);
+    console.log(`[BOM] ${Object.keys(obj.data).length} BOMs restaurados do cache`);
+  }catch(e){}
+}
+
+function _saveBOMCache(){
+  try{
+    localStorage.setItem(BOM_CACHE_KEY,JSON.stringify({v:BOM_CACHE_VER,data:BOM_CACHE}));
+  }catch(e){
+    // Storage cheio — salva só os BOMs da programação atual
+    try{
+      localStorage.removeItem(BOM_CACHE_KEY);
+      const slim={};
+      for(const mat of Object.keys(queued)){if(BOM_CACHE[mat])slim[mat]=BOM_CACHE[mat];}
+      localStorage.setItem(BOM_CACHE_KEY,JSON.stringify({v:BOM_CACHE_VER,data:slim}));
+    }catch(e2){}
+  }
+}
+
 // Inverted index: mat → [{ct, indir, qty_base}] — built once after CTI loads
 let CTI_BY_MAT={};
 // Galvanoplastia map: mat → 'GALV-ANOD' | 'GALV-ZINC' (loaded from static JSON)
@@ -1272,10 +1302,18 @@ async function calcAll(){
   const btn=document.getElementById('calcAll');
   if(btn){btn.disabled=true;btn.textContent='Calculando...';}
 
-  // Phase 1: fetch all BOM trees in parallel (network-bound, safe to parallelize)
-  if(ps)ps.textContent='Carregando BOMs...';
-  const pas=keys.map(k=>queued[k].pa);
-  await Promise.all([...new Set(pas.map(p=>p.mat))].map(mat=>getBOMTree(mat)));
+  // Phase 1: fetch only MISSING BOMs in parallel batches of 10
+  const allMats=[...new Set(keys.map(k=>queued[k].pa?.mat||k))];
+  const missingMats=allMats.filter(m=>!BOM_CACHE[m]);
+  if(missingMats.length){
+    if(ps)ps.textContent=`Carregando ${missingMats.length} BOMs...`;
+    const BATCH=10;
+    for(let i=0;i<missingMats.length;i+=BATCH){
+      await Promise.all(missingMats.slice(i,i+BATCH).map(mat=>getBOMTree(mat)));
+      if(ps)ps.textContent=`Carregando BOMs ${Math.min(i+BATCH,missingMats.length)}/${missingMats.length}...`;
+      await new Promise(r=>setTimeout(r,0));
+    }
+  }
 
   // Phase 2: calculate each PA (CPU-bound, sequential with yield)
   let done=0;
@@ -1283,13 +1321,13 @@ async function calcAll(){
     await calcPA(num);
     done++;
     if(ps)ps.textContent=`Calculando ${done}/${keys.length}...`;
-    // Yield to browser every 5 PAs to avoid jank
     if(done%5===0)await new Promise(r=>setTimeout(r,0));
   }
 
   if(btn){btn.disabled=false;btn.textContent='▶ Calcular Tudo';}
   updateProgCounter();
   renderProgGrid();
+  _saveBOMCache();
 }
 
 function getGlobalMaps(){
