@@ -1829,7 +1829,10 @@ document.getElementById('xlsIn').addEventListener('change',function(e){
     const skipped=[];
     rows.slice(1).forEach((row,i)=>{
       const matRaw=rawRows[i+1]?.[matI];
-      const mat=String(matRaw||'').trim();
+      // Always treat as string — Excel may store as number
+      let mat=String(matRaw??'').trim().replace(/\.0+$/,'');
+      // Pad with leading zeros if needed (codes are always 11 digits)
+      if(mat&&/^\d+$/.test(mat)&&mat.length<11)mat=mat.padStart(11,'0');
       if(!mat||mat==='undefined')return;
       const qty=Math.round(parseFloat(String(rawRows[i+1]?.[qtyI]||'0').replace(',','.'))||0);
       if(qty<=0)return;
@@ -2190,4 +2193,3 @@ checkAutoLogin();
 </div>
 </body>
 </html>
-
