@@ -341,14 +341,14 @@ table.ctt th{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--te
 </div>
 
 <div class="tabs">
-  <div class="tab active" data-s="Params">Parâmetros</div>
-  <div class="tab" data-s="Prog">Programação</div>
+  <div class="tab" data-s="Params">Parâmetros</div>
+  <div class="tab active" data-s="Prog">Programação</div>
   <div class="tab" data-s="Consol">Análise Capacidade</div>
   <div class="tab" data-s="Roteiros">Roteiros por CT</div>
 </div>
 
 <!-- PROGRAMAÇÃO -->
-<div class="screen" id="sProg">
+<div class="screen on" id="sProg">
   <div class="sb">
     <div class="sb-head">
       <div class="sb-search">
@@ -427,10 +427,6 @@ table.ctt th{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--te
       <span class="slicer-days" id="slicerDaysLbl2">0d úteis</span>
       <span class="weekend-alert" id="weekendAlert2" style="display:none">⚠ datas em fim de semana</span>
     </div>
-    <div class="exec-panel" id="execPanel">
-      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3)">Calcule a programação para ver o painel executivo</div>
-    </div>
-    <div class="ranking-panel" id="rankingPanel"></div>
     <div class="consol-bottom">
       <div class="sector-tabs">
         <div class="stab active fab" data-sc="fab">Fabricação</div>
@@ -2122,7 +2118,7 @@ checkAutoLogin();
 
 
 <!-- ═══ TELA: PARÂMETROS ═══ -->
-<div class="screen on" id="sParams">
+<div class="screen" id="sParams">
   <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;background:var(--bg);">
     <div style="padding:10px 20px;border-bottom:1px solid var(--border);background:var(--s1);display:flex;align-items:center;gap:14px;flex-shrink:0;">
       <div style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.12em;color:var(--text2)">PARÂMETROS — HC / EFICIÊNCIA / HORAS</div>
