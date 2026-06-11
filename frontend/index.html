@@ -990,7 +990,12 @@ function defS(ct){
   const dias=window._slicerDays&&!isInactive(ct)?window._slicerDays:(ctSets[ct]?.dias??5);
   return{turnos:ctSets[ct]?.turnos??1,hturno:ctSets[ct]?.hturno??8.8,dias,efic:ctSets[ct]?.efic??85};
 }
-function capMin(ct){if(isInactive(ct))return 0;const s=defS(ct);return s.turnos*s.hturno*s.dias*(s.efic/100)*60;}
+function capMin(ct){
+  if(isInactive(ct))return 0;
+  const s=defS(ct);
+  const hc=parseFloat(ctSets[ct]?.hc)||1;
+  return s.turnos*s.hturno*s.dias*(s.efic/100)*hc*60;
+}
 function saveCtSets(){try{localStorage.setItem('pcp_cts_v2',JSON.stringify(ctSets));}catch(e){}}
 
 function saveProgData(){
