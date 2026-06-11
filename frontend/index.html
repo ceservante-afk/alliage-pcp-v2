@@ -2051,7 +2051,7 @@ function renderParamsTable(){
           ${cts.map(ct=>{
             const s=defS(ct);
             const inactive=isInactive(ct);
-            const cap=inactive?'—':(s.turnos*s.hturno*hDays*(s.efic/100)).toFixed(1);
+            const cap=inactive?'—':(s.turnos*s.hturno*hDays*(s.efic/100)*hc).toFixed(1);
             const hc=ctSets[ct]?.hc||1;
             const isCustom2=ctSets[ct]&&Object.keys(ctSets[ct]).some(k=>k!=='hc'&&k!=='inactive');
             return`<tr class="params-row" style="border-bottom:1px solid var(--border);${inactive?'background:rgba(107,114,128,.07);opacity:.8':isCustom2?'background:rgba(37,99,168,.04)':''}">
@@ -2100,7 +2100,8 @@ function updateParamCT(inp){
   const row=inp.closest('tr');
   if(row){
     const s=defS(ct);
-    const cap=(s.turnos*s.hturno*s.dias*(s.efic/100)).toFixed(1);
+    const hc=ctSets[ct]?.hc||1;
+    const cap=(s.turnos*s.hturno*s.dias*(s.efic/100)*hc).toFixed(1);
     const capCell=row.querySelector('td[data-cap]');
     if(capCell)capCell.textContent=cap;
   }
