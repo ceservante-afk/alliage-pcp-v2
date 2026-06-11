@@ -1471,14 +1471,21 @@ function inlineEditCT(ct,btn){
   } else {
     // EDIT: transform cells into inputs
     const s=defS(ct);
-    const fields={turnos:{min:1,max:3},hturno:{min:1,max:24},dias:{min:1,max:31},efic:{min:1,max:100}};
+    const fields={turnos:{min:1,max:3,step:1},hturno:{min:1,max:24,step:0.1},dias:{min:1,max:31,step:1,readonly:true},efic:{min:1,max:100,step:1}};
     row.querySelectorAll('td[data-field]').forEach(td=>{
       const f=td.dataset.field;
       const cfg=fields[f];
-      td.innerHTML=`<input type="number" min="${cfg.min}" max="${cfg.max}" value="${s[f]}"
-        style="width:52px;background:var(--s1);border:1px solid var(--accent2);padding:3px 4px;
-               font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent3);
-               outline:none;text-align:center;">`;
+      if(cfg.readonly){
+        td.innerHTML=`<input type="number" value="${s[f]}" readonly
+          style="width:52px;background:var(--bg);border:1px solid var(--border2);padding:3px 4px;
+                 font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3);
+                 outline:none;text-align:center;opacity:.5;cursor:not-allowed;">`;
+      } else {
+        td.innerHTML=`<input type="number" min="${cfg.min}" max="${cfg.max}" step="${cfg.step||1}" value="${s[f]}"
+          style="width:52px;background:var(--s1);border:1px solid var(--accent2);padding:3px 4px;
+                 font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent3);
+                 outline:none;text-align:center;">`;
+      }
     });
     row.classList.add('ct-editing');
     btn.textContent='✔';btn.style.color='var(--green)';
@@ -2050,8 +2057,8 @@ function renderParamsTable(){
               <td style="padding:3px 4px;text-align:center"><input class="tci" type="number" min="1" max="3" value="${s.turnos}" data-ct="${ct}" data-f="turnos" onchange="updateParamCT(this)" ${inactive?'disabled':''}></td>
               <td style="padding:3px 4px;text-align:center"><input class="tci" type="number" min="1" max="24" value="${s.hturno}" data-ct="${ct}" data-f="hturno" onchange="updateParamCT(this)" ${inactive?'disabled':''}></td>
               <td style="padding:3px 4px;text-align:center"><input class="tci" type="number" min="1" max="100" value="${s.efic}" data-ct="${ct}" data-f="efic" onchange="updateParamCT(this)" ${inactive?'disabled':''}></td>
-              <td style="padding:3px 4px;text-align:center"><input class="tci" type="number" min="1" max="99" value="${hc}" data-ct="${ct}" data-f="hc" onchange="updateParamCT(this)" ${inactive?'disabled':''}></td>
-              <td style="padding:3px 4px;text-align:center"><input class="tci" type="number" min="1" max="31" value="${s.dias}" data-ct="${ct}" data-f="dias" onchange="updateParamCT(this)" ${inactive?'disabled':''}></td>
+              <td style="padding:3px 4px;text-align:center"><input class="tci" type="number" min="0.1" max="99" step="0.5" value="${hc}" data-ct="${ct}" data-f="hc" onchange="updateParamCT(this)" ${inactive?'disabled':''}></td>
+              <td style="padding:3px 4px;text-align:center"><input class="tci" type="number" value="${s.dias}" data-ct="${ct}" data-f="dias" readonly style="opacity:.5;cursor:not-allowed;pointer-events:none;background:var(--bg)"></td>
               <td data-cap style="padding:5px 8px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:10px;color:${inactive?'#6b7280':'var(--accent3)'}">${cap}</td>
               <td style="padding:3px 6px;text-align:center;white-space:nowrap;">
                 <button onclick="toggleInactiveCT('${ct}')" style="padding:2px 6px;border:1px solid ${inactive?'#6b7280':'var(--border2)'};background:${inactive?'rgba(107,114,128,.15)':'transparent'};color:${inactive?'#9ca3af':'var(--text3)'};font-family:'JetBrains Mono',monospace;font-size:8px;cursor:pointer;margin-bottom:2px;" title="${inactive?'Reativar':'Inativar'}">${inactive?'▶ Ativar':'⊘'}</button>
