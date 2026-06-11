@@ -2051,8 +2051,8 @@ function renderParamsTable(){
           ${cts.map(ct=>{
             const s=defS(ct);
             const inactive=isInactive(ct);
-            const cap=inactive?'—':(s.turnos*s.hturno*hDays*(s.efic/100)*hc).toFixed(1);
             const hc=ctSets[ct]?.hc||1;
+            const cap=inactive?'—':(s.turnos*s.hturno*hDays*(s.efic/100)*hc).toFixed(1);
             const isCustom2=ctSets[ct]&&Object.keys(ctSets[ct]).some(k=>k!=='hc'&&k!=='inactive');
             return`<tr class="params-row" style="border-bottom:1px solid var(--border);${inactive?'background:rgba(107,114,128,.07);opacity:.8':isCustom2?'background:rgba(37,99,168,.04)':''}">
               <td style="padding:5px 8px;font-family:'JetBrains Mono',monospace;font-size:10px;color:${inactive?'#6b7280':'var(--accent3)'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ct}
