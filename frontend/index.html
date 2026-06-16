@@ -459,6 +459,7 @@ table.ctt th{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--te
       <div style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--accent3)" id="rCTName">Selecione um CT</div>
       <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3)" id="rCTMeta"></div>
       <div style="display:flex;gap:6px;margin-left:auto;align-items:center;">
+        <button id="rExportBtn" onclick="exportRoteiroCT()" style="display:none;padding:4px 12px;border:1px solid var(--accent2);background:rgba(37,99,168,.15);color:var(--accent3);font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;cursor:pointer;">↓ Exportar XLS</button>
         <div class="sb-search" style="width:180px">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
           <input id="rItemSrch" placeholder="Buscar descrição...">
@@ -1742,6 +1743,8 @@ function renderRItems(){
   const wrap=document.getElementById('rTableWrap');if(!rActiveCT||!wrap)return;
   const rCTNameEl=document.getElementById('rCTName');
   if(rCTNameEl)rCTNameEl.textContent=rActiveCT+(CT_NAMES[rActiveCT]?' · '+CT_NAMES[rActiveCT]:'');
+  const exportBtn=document.getElementById('rExportBtn');
+  if(exportBtn)exportBtn.style.display='';
   const rawItems=CTI[rActiveCT]||[];
   const enriched=rawItems.map(item=>{
     const desc=item.desc||'—';
@@ -1803,7 +1806,65 @@ function renderRItems(){
   tbl.querySelectorAll('.sort-th').forEach(th=>th.addEventListener('click',()=>{const c=th.dataset.rc;if(rSortCol===c)rSortAsc=!rSortAsc;else{rSortCol=c;rSortAsc=(c==='mat'||c==='desc'||c==='op');}renderRItems();}));
 }
 
-// ── XLS IMPORT ────────────────────────────────────────────────────────
+// ── EXPORTAR ROTEIRO CT ────────────────────────────────────────────────
+function exportRoteiroCT(){
+  if(!rActiveCT)return;
+  const rawItems=CTI[rActiveCT]||[];
+  const compMap=globalCompMap;
+  const q=document.getElementById('rItemSrch')?.value?.toLowerCase()||'';
+
+  const rows=rawItems.map(item=>{
+    const entry=(compMap[rActiveCT]||[]).find(e=>e.mat===item.mat);
+    const progQty=entry?entry.qtyTotal:0;
+    const cargaMin=progQty*item.indir;
+    return{
+      mat:item.mat,
+      desc:item.desc||CT_NAMES[item.mat]||'',
+      op:item.op||'',
+      desc_op:item.desc_op||'',
+      indir:item.indir||0,
+      progQty,
+      cargaMin,
+    };
+  }).filter(r=>!q||r.desc.toLowerCase().includes(q)||r.mat.includes(q));
+
+  // Sort same as current view
+  rows.sort((a,b)=>{
+    let va,vb;
+    if(rSortCol==='mat'){va=a.mat;vb=b.mat;}
+    else if(rSortCol==='desc'){va=a.desc;vb=b.desc;}
+    else if(rSortCol==='op'){va=a.op;vb=b.op;}
+    else if(rSortCol==='prog'){va=a.progQty;vb=b.progQty;}
+    else{va=a.indir;vb=b.indir;}
+    if(va<vb)return rSortAsc?-1:1;if(va>vb)return rSortAsc?1:-1;return 0;
+  });
+
+  const wsData=[
+    ['CT', rActiveCT],
+    ['Nome', CT_NAMES[rActiveCT]||''],
+    ['Exportado em', new Date().toLocaleString('pt-BR')],
+    [],
+    ['COD','DESCRIÇÃO','OP','DESC. OPERAÇÃO','INDIR (min/pc)','QTD PROGRAMADA','CARGA (h)'],
+    ...rows.map(r=>[
+      r.mat,
+      r.desc,
+      r.op,
+      r.desc_op,
+      parseFloat(r.indir.toFixed(3)),
+      r.progQty>0?Math.round(r.progQty):'',
+      r.cargaMin>0?parseFloat((r.cargaMin/60).toFixed(2)):'',
+    ])
+  ];
+
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet(wsData);
+
+  // Column widths
+  ws['!cols']=[{wch:14},{wch:40},{wch:8},{wch:35},{wch:14},{wch:16},{wch:12}];
+
+  XLSX.utils.book_append_sheet(wb,ws,rActiveCT.replace(/[:\\/?*\[\]]/g,'_'));
+  XLSX.writeFile(wb,`Roteiro_${rActiveCT}_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.xlsx`);
+}
 document.getElementById('xlsIn').addEventListener('change',function(e){
   const file=e.target.files[0];if(!file)return;
   const reader=new FileReader();
