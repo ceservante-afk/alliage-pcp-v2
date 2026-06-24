@@ -344,6 +344,7 @@ table.ctt th{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--te
   <div class="tab" data-s="Params">Parâmetros</div>
   <div class="tab active" data-s="Prog">Programação</div>
   <div class="tab" data-s="Consol">Análise Capacidade</div>
+  <div class="tab" data-s="Testes">Ambiente de Testes</div>
   <div class="tab" data-s="Roteiros">Roteiros por CT</div>
 </div>
 
@@ -433,6 +434,31 @@ table.ctt th{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--te
         <div class="stab mont" data-sc="mont">Montagem</div>
       </div>
       <div class="sector-body" id="sectorBody"></div>
+    </div>
+  </div>
+</div>
+
+<!-- AMBIENTE DE TESTES -->
+<div class="screen" id="sTestes">
+  <div class="consol-wrap">
+    <div class="consol-topbar">
+      <div class="consol-title">Ambiente de Testes</div>
+      <div class="consol-sub" id="testSub">Simule movimentações de carga entre CTs sem afetar a programação real</div>
+      <button class="recalc" id="testResetBtn" onclick="resetTestEnv()" style="display:none">↺ Resetar Simulação</button>
+      <button class="recalc" id="testNewSelBtn" onclick="showTestSelector()" style="display:none">⚙ Trocar Seleção</button>
+    </div>
+    <div id="testSelectorWrap" style="flex:1;overflow-y:auto;padding:16px;">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);margin-bottom:12px;">
+        Selecione os CTs que deseja analisar e simular movimentações de carga:
+      </div>
+      <div id="testSelectorBody"></div>
+      <div style="margin-top:16px;display:flex;gap:8px;">
+        <button class="calc-all" id="testStartBtn" onclick="startTestEnv()">▶ Iniciar Simulação</button>
+      </div>
+    </div>
+    <div id="testSimWrap" style="display:none;flex:1;overflow:hidden;flex-direction:column;">
+      <div id="testChangesPanel" style="display:none;padding:10px 16px;background:rgba(245,158,11,.06);border-bottom:1px solid var(--border);"></div>
+      <div class="ct-scroll" id="testCTBody" style="flex:1;overflow-y:auto;"></div>
     </div>
   </div>
 </div>
@@ -1367,7 +1393,327 @@ function getGlobalMaps(){
   return{ctMap,compMap};
 }
 
-// ── CONSOLIDADO ───────────────────────────────────────────────────────
+// ── AMBIENTE DE TESTES ───────────────────────────────────────────────────
+// Estado isolado: nunca toca em queued/globalCTMap/globalCompMap reais.
+let TEST_SELECTED_CTS=[];      // CTs escolhidos na tela de seleção
+let TEST_CTMAP=null;           // clone de ctMap, mutável pela simulação
+let TEST_COMPMAP=null;         // clone de compMap, mutável pela simulação
+let TEST_ORIGINAL_CTMAP=null;  // snapshot original para comparação
+let TEST_ACTIVE=false;
+const TEST_STORAGE_KEY='pcp_test_env_v1';
+
+function _deepCloneMap(map){
+  const out={};
+  for(const[k,v] of Object.entries(map||{})){
+    if(Array.isArray(v))out[k]=v.map(item=>({...item}));
+    else out[k]={...v};
+  }
+  return out;
+}
+
+function saveTestEnv(){
+  try{
+    localStorage.setItem(TEST_STORAGE_KEY,JSON.stringify({
+      selected:TEST_SELECTED_CTS,
+      ctMap:TEST_CTMAP,
+      compMap:TEST_COMPMAP,
+      original:TEST_ORIGINAL_CTMAP,
+      active:TEST_ACTIVE,
+    }));
+  }catch(e){console.warn('saveTestEnv error',e);}
+}
+
+function loadTestEnv(){
+  try{
+    const raw=localStorage.getItem(TEST_STORAGE_KEY);
+    if(!raw)return false;
+    const obj=JSON.parse(raw);
+    TEST_SELECTED_CTS=obj.selected||[];
+    TEST_CTMAP=obj.ctMap||null;
+    TEST_COMPMAP=obj.compMap||null;
+    TEST_ORIGINAL_CTMAP=obj.original||null;
+    TEST_ACTIVE=!!obj.active;
+    return TEST_ACTIVE;
+  }catch(e){return false;}
+}
+
+function initTestTab(){
+  if(loadTestEnv()&&TEST_ACTIVE){
+    showTestSim();
+  } else {
+    showTestSelector();
+  }
+}
+
+function showTestSelector(){
+  TEST_ACTIVE=false;
+  document.getElementById('testSelectorWrap').style.display='';
+  document.getElementById('testSimWrap').style.display='none';
+  document.getElementById('testResetBtn').style.display='none';
+  document.getElementById('testNewSelBtn').style.display='none';
+  renderTestSelector();
+}
+
+function renderTestSelector(){
+  const body=document.getElementById('testSelectorBody');
+  if(!body)return;
+  const preSelected=new Set(TEST_SELECTED_CTS);
+  body.innerHTML=FAB_SECTORS.map(sec=>{
+    const cts=Object.keys(CTI).filter(ct=>sec.match?sec.match(ct):ct.startsWith(sec.key)).sort();
+    if(!cts.length)return'';
+    return`<div style="margin-bottom:14px;">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;color:${sec.color||'var(--accent3)'};letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px;border-bottom:1px solid var(--border);padding-bottom:4px;">${sec.label}</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:4px;">
+        ${cts.map(ct=>{
+          const checked=preSelected.has(ct);
+          return`<label style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:var(--s2);border:1px solid ${checked?'var(--accent2)':'var(--border)'};cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text2);">
+            <input type="checkbox" class="test-ct-chk" value="${ct}" ${checked?'checked':''} style="accent-color:var(--accent2)">
+            ${ct}
+          </label>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function startTestEnv(){
+  const checked=[...document.querySelectorAll('.test-ct-chk:checked')].map(c=>c.value);
+  if(!checked.length){alert('Selecione ao menos um CT para iniciar a simulação.');return;}
+  TEST_SELECTED_CTS=checked;
+  // Clone the REAL current state — never mutate globalCTMap/globalCompMap directly
+  const{ctMap,compMap}=getGlobalMaps();
+  TEST_CTMAP=_deepCloneMap(ctMap);
+  TEST_COMPMAP=_deepCloneMap(compMap);
+  TEST_ORIGINAL_CTMAP=_deepCloneMap(ctMap);
+  TEST_ACTIVE=true;
+  saveTestEnv();
+  showTestSim();
+}
+
+function resetTestEnv(){
+  if(!confirm('Resetar a simulação? Todas as movimentações feitas serão descartadas.'))return;
+  localStorage.removeItem(TEST_STORAGE_KEY);
+  TEST_SELECTED_CTS=[];TEST_CTMAP=null;TEST_COMPMAP=null;TEST_ORIGINAL_CTMAP=null;TEST_ACTIVE=false;
+  showTestSelector();
+}
+
+function showTestSim(){
+  document.getElementById('testSelectorWrap').style.display='none';
+  document.getElementById('testSimWrap').style.display='flex';
+  document.getElementById('testResetBtn').style.display='';
+  document.getElementById('testNewSelBtn').style.display='';
+  renderTestSim();
+}
+
+function testCapMin(ct){
+  // Usa exatamente os mesmos parâmetros configurados em ctSets — não duplica lógica
+  return capMin(ct);
+}
+
+function renderTestSim(){
+  const body=document.getElementById('testCTBody');
+  if(!body)return;
+  const entries=TEST_SELECTED_CTS.map(ct=>[ct,TEST_CTMAP[ct]||{load_min:0,setup_min:0}]);
+  const maxLoad=Math.max(...entries.map(([,v])=>ctLoad(v)),1);
+
+  const tbl=document.createElement('table');tbl.className='ctt';
+  tbl.innerHTML=`<colgroup><col style="width:220px"><col style="width:90px"><col style="width:80px"><col style="width:60px"><col style="width:68px"><col style="width:52px"><col style="width:62px"><col style="width:72px"><col style="width:100px"><col style="width:72px"><col style="width:84px"></colgroup><thead><tr><th>CT</th><th>Carga</th><th>Cap.</th><th style="text-align:center">Turnos</th><th style="text-align:center">H/Turno</th><th style="text-align:center">Dias</th><th style="text-align:center">Efic %</th><th>%</th><th>Ocupação</th><th>Status</th><th style="text-align:right">Ações</th></tr></thead>`;
+  const tbody=document.createElement('tbody');
+
+  entries.forEach(([ct,val])=>{
+    const load=ctLoad(val),setup=ctSetup(val),proc=load-setup;
+    const s=defS(ct);const cap=testCapMin(ct);
+    const pct=cap>0?Math.round(load/cap*100):0;
+    const col=semC(pct,false);const bw=Math.min(pct,100);
+    const name=CT_NAMES[ct]||'';
+    const ctSec=getSectorForCT(ct);
+    const rowColor=ctSec?ctSec.color:'var(--accent2)';
+    const rowClass=pct>=100?'ct-main-tr ct-row-critical':pct>=80?'ct-main-tr ct-row-warning':'ct-main-tr';
+    const hasSetup=setup>0;
+    const procW=cap>0?Math.min(proc/cap*100,100):0;
+    const setupW=cap>0?Math.min(setup/cap*100,Math.max(0,100-procW)):0;
+    const barHtml=hasSetup
+      ?`<div class="ct-bar-bg"><div style="display:flex;height:100%;border-radius:4px;overflow:hidden"><div style="width:${procW}%;background:${col};transition:width .3s"></div><div style="width:${setupW}%;background:#f59e0b;transition:width .3s" title="Setup: ${fmtH(setup)}"></div></div></div>`
+      :`<div class="ct-bar-bg"><div class="ct-bar-fill" style="width:${bw}%;background:${col}"></div></div>`;
+
+    // Comparação com original
+    const origVal=TEST_ORIGINAL_CTMAP[ct];
+    const origLoad=origVal?ctLoad(origVal):0;
+    const origPct=cap>0?Math.round(origLoad/cap*100):0;
+    const changed=origPct!==pct;
+
+    const tr=document.createElement('tr');tr.className=rowClass;
+    tr.innerHTML=`
+      <td><div class="ct-name" style="color:${rowColor};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${ct}${changed?' <span style="color:#f59e0b;font-size:9px">●</span>':''}</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</div></td>
+      <td class="ct-load-val">${fmtH(load)}</td>
+      <td class="ct-cap-val">${fmtH(cap)}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center">${s.turnos}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center">${s.hturno}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center">${s.dias}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center">${s.efic}</td>
+      <td class="ct-pct" style="color:${col}">${pct}%${changed?` <span style="font-size:9px;color:#f59e0b">(era ${origPct}%)</span>`:''}</td>
+      <td>${barHtml}</td>
+      <td class="ct-status" style="color:${col}">${semTxt(pct,false)}</td>
+      <td style="white-space:nowrap;text-align:right">
+        <span class="test-det-open" style="cursor:pointer;color:var(--text3);font-size:11px;margin-right:4px" data-ct="${ct}">▶</span>
+      </td>`;
+    tr.querySelector('.test-det-open').addEventListener('click',e=>{e.stopPropagation();openTestDetail(ct);});
+    tbody.appendChild(tr);
+  });
+
+  body.innerHTML='';
+  tbl.appendChild(tbody);body.appendChild(tbl);
+  const det=document.createElement('div');det.className='detail-panel closed';det.id='testDetPanel';document.body.appendChild(det);
+
+  renderTestChangesPanel();
+}
+
+function renderTestChangesPanel(){
+  const panel=document.getElementById('testChangesPanel');
+  if(!panel)return;
+  const changes=[];
+  for(const ct of TEST_SELECTED_CTS){
+    const cur=TEST_CTMAP[ct]||{load_min:0,setup_min:0};
+    const orig=TEST_ORIGINAL_CTMAP[ct]||{load_min:0,setup_min:0};
+    const cap=testCapMin(ct);
+    const curPct=cap>0?Math.round(ctLoad(cur)/cap*100):0;
+    const origPct=cap>0?Math.round(ctLoad(orig)/cap*100):0;
+    if(curPct!==origPct)changes.push({ct,origPct,curPct});
+  }
+  if(!changes.length){panel.style.display='none';return;}
+  panel.style.display='';
+  panel.innerHTML=`<div style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;color:#f59e0b;margin-bottom:4px;">⚙ RESUMO DAS MOVIMENTAÇÕES</div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;">
+      ${changes.map(c=>`<span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text2);">
+        <b style="color:var(--accent3)">${c.ct}</b>: ${c.origPct}% → <b style="color:${c.curPct>c.origPct?'#ef4444':'#22c55e'}">${c.curPct}%</b>
+      </span>`).join('')}
+    </div>`;
+}
+
+function openTestDetail(ct){
+  const panel=document.getElementById('testDetPanel');if(!panel)return;
+  panel.classList.remove('closed');
+  const cap=testCapMin(ct);
+  const val=TEST_CTMAP[ct]||{load_min:0,setup_min:0};
+  const load=ctLoad(val);
+  const pct=cap>0?Math.round(load/cap*100):0;
+  const col=semC(pct,false);
+  const items=(TEST_COMPMAP[ct]||[]).slice();
+  let sortCol='mins',sortAsc=false;
+
+  function buildTable(){
+    const sorted=[...items].sort((a,b)=>{
+      let va,vb;
+      if(sortCol==='mat'){va=a.mat;vb=b.mat;}else if(sortCol==='desc'){va=a.desc;vb=b.desc;}
+      else if(sortCol==='qty'){va=a.qtyTotal;vb=b.qtyTotal;}else if(sortCol==='unit'){va=a.indirUnit;vb=b.indirUnit;}
+      else{va=a.mins;vb=b.mins;}
+      if(typeof va==='string')return sortAsc?va.localeCompare(vb):vb.localeCompare(va);
+      return sortAsc?va-vb:vb-va;
+    });
+    const maxM=sorted[0]?.mins||1;const ar=d=>d?'▲':'▼';
+    const ctNameStr=CT_NAMES[ct]||'';
+    const otherCTs=TEST_SELECTED_CTS.filter(c=>c!==ct);
+    panel.innerHTML=`
+      <div class="det-head">
+        <div><div class="det-ct-name">${ct}</div><div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);margin-top:1px">${ctNameStr}</div></div>
+        <button class="det-close" id="testDetClose">✕</button>
+      </div>
+      <div class="det-meta">Carga: <b>${fmtH(load)}</b> &nbsp;|&nbsp; Cap: <b>${fmtH(cap)}</b> &nbsp;|&nbsp; Ocupação: <b style="color:${col}">${pct}%</b> &nbsp;|&nbsp; ${items.length} componente(s)</div>
+      <div style="padding:6px 14px;background:rgba(37,99,168,.06);border-bottom:1px solid var(--border);font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);">
+        Selecione o CT de destino em uma ou mais linhas e clique em "Aplicar Movimentações"
+      </div>
+      <div class="det-scroll">
+        ${sorted.length?`<table class="det-ops" style="width:100%;table-layout:auto">
+          <thead><tr>
+            <th class="sort-th" data-c="mat" style="width:100px;cursor:pointer">COD ${sortCol==='mat'?ar(sortAsc):''}</th>
+            <th class="sort-th" data-c="desc" style="cursor:pointer">DESCRIÇÃO ${sortCol==='desc'?ar(sortAsc):''}</th>
+            <th class="sort-th" data-c="qty" style="width:64px;cursor:pointer;text-align:right">QTD ${sortCol==='qty'?ar(sortAsc):''}</th>
+            <th class="sort-th" data-c="mins" style="width:72px;cursor:pointer;text-align:right">TOTAL MIN ${sortCol==='mins'?ar(sortAsc):''}</th>
+            <th style="width:150px;text-align:center">MOVER PARA</th>
+          </tr></thead>
+          <tbody>${sorted.map((item,i)=>{
+            const bw=Math.round(item.mins/maxM*100);
+            return`<tr>
+              <td style="font-family:JetBrains Mono,monospace;font-size:9px;color:var(--accent3)">${item.mat}</td>
+              <td style="font-size:11px;word-break:break-word;line-height:1.3">${item.desc}</td>
+              <td style="font-family:JetBrains Mono,monospace;font-size:10px;text-align:right;color:var(--text2)">${Math.round(item.qtyTotal)}</td>
+              <td style="font-family:JetBrains Mono,monospace;font-size:10px;text-align:right;color:var(--accent3)">${item.mins.toFixed(1)}<div style="height:3px;background:var(--s4);border-radius:1px;margin-top:2px"><div style="height:100%;width:${bw}%;background:var(--accent2);border-radius:1px"></div></div></td>
+              <td style="text-align:center">
+                <select class="test-move-sel" data-mat="${item.mat}" data-from="${ct}" style="width:100%;background:var(--bg);border:1px solid var(--border2);color:var(--text2);font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 4px;">
+                  <option value="">— manter aqui —</option>
+                  ${otherCTs.map(dst=>`<option value="${dst}">${dst}</option>`).join('')}
+                </select>
+              </td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table>`:'<div style="color:var(--text3);font-size:11px;padding:12px 0">Nenhum componente</div>'}
+      </div>
+      ${items.length?`<div style="padding:10px 14px;border-top:1px solid var(--border);display:flex;gap:8px;">
+        <button class="calc-all" id="testApplyBtn" style="flex:1;">✓ Aplicar Movimentações</button>
+      </div>`:''}
+    `;
+    document.getElementById('testDetClose')?.addEventListener('click',()=>{panel.classList.add('closed');});
+    panel.querySelectorAll('.sort-th').forEach(th=>th.addEventListener('click',()=>{
+      const c=th.dataset.c;if(sortCol===c)sortAsc=!sortAsc;else{sortCol=c;sortAsc=(c==='mat'||c==='desc');}buildTable();
+    }));
+    document.getElementById('testApplyBtn')?.addEventListener('click',()=>applyTestMoves(ct));
+  }
+  buildTable();
+}
+
+function applyTestMoves(fromCt){
+  const selects=[...document.querySelectorAll('.test-move-sel')].filter(s=>s.dataset.from===fromCt&&s.value);
+  if(!selects.length){alert('Nenhuma movimentação selecionada.');return;}
+
+  let movedCount=0;
+  for(const sel of selects){
+    const mat=sel.dataset.mat;
+    const toCt=sel.value;
+    if(!toCt||toCt===fromCt)continue;
+
+    const fromItems=TEST_COMPMAP[fromCt]||[];
+    const idx=fromItems.findIndex(i=>i.mat===mat);
+    if(idx===-1)continue;
+    const item=fromItems[idx];
+
+    // Remove from origin
+    fromItems.splice(idx,1);
+
+    // Add to destination (mesmo INDIR, mesmo mins — só muda de CT)
+    if(!TEST_COMPMAP[toCt])TEST_COMPMAP[toCt]=[];
+    const existing=TEST_COMPMAP[toCt].find(i=>i.mat===mat);
+    if(existing){
+      existing.qtyTotal+=item.qtyTotal;
+      existing.mins+=item.mins;
+    } else {
+      TEST_COMPMAP[toCt].push({...item});
+    }
+    movedCount++;
+  }
+
+  if(!movedCount){alert('Nenhuma movimentação válida.');return;}
+
+  // Recalculate load_min and setup_min for ALL affected CTs (origin + all destinations)
+  const affected=new Set([fromCt,...selects.map(s=>s.value).filter(Boolean)]);
+  for(const ct of affected){
+    const items=TEST_COMPMAP[ct]||[];
+    const processMin=items.reduce((s,it)=>s+it.mins,0);
+    const setupPerItem=CT_SETUP_MIN[ct]||0;
+    const setupMin=setupPerItem*items.length;
+    if(!TEST_CTMAP[ct])TEST_CTMAP[ct]={load_min:0,setup_min:0};
+    TEST_CTMAP[ct].load_min=processMin+setupMin;
+    TEST_CTMAP[ct].setup_min=setupMin;
+    // Auto-include destination CTs in the visible list if not already there
+    if(!TEST_SELECTED_CTS.includes(ct))TEST_SELECTED_CTS.push(ct);
+  }
+
+  saveTestEnv();
+  document.getElementById('testDetPanel')?.classList.add('closed');
+  renderTestSim();
+}
+
+
 function renderConsol(){
   const n=Object.keys(queued).length;
   const pcs=Object.values(queued).reduce((s,{qty})=>s+qty,0);
@@ -1967,6 +2313,7 @@ function setupEvents(){
     document.querySelectorAll('.screen').forEach(sc=>sc.classList.remove('on'));
     document.getElementById('s'+s)?.classList.add('on');
     if(s==='Consol'){activeFabSector=null;renderConsol();}
+    if(s==='Testes'){initTestTab();}
     if(s==='Roteiros'){if(Object.keys(CTI).length)renderRCTList();else setTimeout(renderRCTList,500);}
     if(s==='Params'){renderParamsTable();}
   }));
