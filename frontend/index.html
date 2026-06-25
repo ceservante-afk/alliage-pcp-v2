@@ -172,6 +172,8 @@ table.ctt th{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--te
 /* DETAIL PANEL */
 .detail-panel{position:fixed;top:0;right:0;bottom:0;width:620px;background:var(--s1);border-left:1px solid var(--border2);display:flex;flex-direction:column;overflow:hidden;z-index:100;transition:transform .2s;box-shadow:-8px 0 32px rgba(0,0,0,.6);}
 .detail-panel.closed{transform:translateX(100%);}
+.test-detail-fullscreen{position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);display:flex;flex-direction:column;overflow:hidden;z-index:100;transition:opacity .15s;}
+.test-detail-fullscreen.closed{opacity:0;pointer-events:none;}
 .det-head{padding:10px 14px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:flex-start;gap:8px;}
 .det-ct-name{font-size:14px;font-weight:700;letter-spacing:.06em;flex:1;font-family:'JetBrains Mono',monospace;}
 .det-ct-name.fab{color:var(--accent3);}
@@ -1622,7 +1624,7 @@ function renderTestSim(){
 
   body.innerHTML='';
   tbl.appendChild(tbody);body.appendChild(tbl);
-  const det=document.createElement('div');det.className='detail-panel closed';det.id='testDetPanel';document.body.appendChild(det);
+  const det=document.createElement('div');det.className='test-detail-fullscreen closed';det.id='testDetPanel';document.body.appendChild(det);
 
   renderTestChangesPanel();
   updateTestViewToggle();
@@ -1718,6 +1720,17 @@ function openTestDetail(ct){
   panel.classList.remove('closed');
   const cap=testCapMin(ct);
 
+  // Migração defensiva: itens de simulações iniciadas antes do setup por item existir
+  // não têm _setupQty/_setupMin — preenche agora com o padrão do CT, sem precisar resetar.
+  const def=getSetupDefault(ct);
+  if(def.qty&&TEST_COMPMAP[ct]){
+    let migrated=false;
+    for(const item of TEST_COMPMAP[ct]){
+      if(item._setupQty==null){item._setupQty=def.qty;item._setupMin=def.min;migrated=true;}
+    }
+    if(migrated){_recalcTestCT(ct);saveTestEnv();}
+  }
+
   // Respeita o modo de visualização atual (ANTES mostra estado original, DEPOIS mostra simulado)
   // Fallback defensivo: sessões salvas antes desta versão não têm TEST_ORIGINAL_COMPMAP
   const isAntes=TEST_VIEW_MODE==='antes'&&!!TEST_ORIGINAL_COMPMAP;
@@ -1750,84 +1763,104 @@ function openTestDetail(ct){
     const maxM=sorted[0]?.mins||1;const ar=d=>d?'▲':'▼';
     const ctNameStr=CT_NAMES[ct]||'';
     const otherCTs=TEST_SELECTED_CTS.filter(c=>c!==ct);
+    const hasSetupCols=!!getSetupDefault(ct).qty || sorted.some(it=>it._setupQty!=null);
+
     panel.innerHTML=`
-      <div class="det-head">
-        <div><div class="det-ct-name">${ct}</div><div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);margin-top:1px">${ctNameStr}</div></div>
-        <button class="det-close" id="testDetClose">✕</button>
+      <div style="padding:18px 28px;border-bottom:1px solid var(--border);background:var(--s1);display:flex;align-items:center;gap:16px;flex-shrink:0;">
+        <button id="testDetClose" style="background:transparent;border:1px solid var(--border2);color:var(--text2);width:34px;height:34px;border-radius:4px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">←</button>
+        <div style="flex:1;">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:800;color:var(--accent3);letter-spacing:.02em;">${ct}</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3);margin-top:2px;">${ctNameStr}</div>
+        </div>
+        <div style="display:flex;gap:28px;align-items:center;">
+          <div style="text-align:right;">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;">Carga</div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:var(--text);">${fmtH(load)}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;">Capacidade</div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:var(--text2);">${fmtH(cap)}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;">Ocupação</div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:800;color:${col};">${pct}%</div>
+          </div>
+          ${changed?`<div style="text-align:right;border-left:1px solid var(--border);padding-left:20px;">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;">${isAntes?'Depois':'Antes'}</div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:${isAntes?'#8b5cf6':'#f59e0b'};">${isAntes?curPct:origPct}%</div>
+          </div>`:''}
+        </div>
       </div>
-      <div class="det-meta">Carga: <b>${fmtH(load)}</b> &nbsp;|&nbsp; Cap: <b>${fmtH(cap)}</b> &nbsp;|&nbsp; Ocupação: <b style="color:${col}">${pct}%</b>
-        ${changed?(isAntes
-          ?` <span style="color:#8b5cf6;font-size:10px">(depois: ${curPct}% · ${fmtH(ctLoad(curValForCompare))})</span>`
-          :` <span style="color:#f59e0b;font-size:10px">(antes: ${origPct}% · ${fmtH(origLoad)})</span>`
-        ):''}
-        &nbsp;|&nbsp; ${items.length} componente(s)</div>
-      ${isAntes?`<div style="padding:6px 14px;background:rgba(139,92,246,.06);border-bottom:1px solid var(--border);font-family:'JetBrains Mono',monospace;font-size:9px;color:#8b5cf6;">
+      ${isAntes?`<div style="padding:9px 28px;background:rgba(139,92,246,.08);border-bottom:1px solid var(--border);font-family:'JetBrains Mono',monospace;font-size:10px;color:#8b5cf6;">
         Visualizando estado ORIGINAL — alterne para "DEPOIS" para movimentar itens
-      </div>`:`<div style="padding:6px 14px;background:rgba(37,99,168,.06);border-bottom:1px solid var(--border);font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);">
-        Selecione o CT de destino em uma ou mais linhas e clique em "Aplicar Movimentações"
+      </div>`:`<div style="padding:9px 28px;background:rgba(37,99,168,.08);border-bottom:1px solid var(--border);font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text2);">
+        ${items.length} componente(s) · Selecione o CT de destino em uma ou mais linhas e clique em "Aplicar Movimentações"
       </div>`}
-      <div class="det-scroll">
-        ${sorted.length?(()=>{
-          const hasSetupCols=!!getSetupDefault(ct).qty || sorted.some(it=>it._setupQty!=null);
-          return`<table class="det-ops" style="width:100%;table-layout:auto">
-          <thead><tr>
-            <th class="sort-th" data-c="mat" style="width:90px;cursor:pointer">COD ${sortCol==='mat'?ar(sortAsc):''}</th>
-            <th class="sort-th" data-c="desc" style="cursor:pointer">DESCRIÇÃO ${sortCol==='desc'?ar(sortAsc):''}</th>
-            <th class="sort-th" data-c="qty" style="width:56px;cursor:pointer;text-align:right">QTD ${sortCol==='qty'?ar(sortAsc):''}</th>
-            <th class="sort-th" data-c="mins" style="width:64px;cursor:pointer;text-align:right">MIN PEÇA ${sortCol==='mins'?ar(sortAsc):''}</th>
-            ${hasSetupCols?'<th style="width:62px;text-align:center">QTD SETUP/SEM</th><th style="width:62px;text-align:center">MIN/SETUP</th><th style="width:66px;text-align:right">TOTAL SETUP</th>':''}
-            ${isAntes?'':'<th style="width:140px;text-align:center">MOVER PARA</th><th style="width:30px;text-align:center"></th>'}
+      <div style="flex:1;overflow-y:auto;padding:0 28px;">
+        ${sorted.length?`<table style="width:100%;border-collapse:collapse;margin-top:8px;">
+          <thead><tr style="position:sticky;top:0;background:var(--bg);z-index:2;">
+            <th class="sort-th" data-c="mat" style="cursor:pointer;text-align:left;padding:10px 12px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--border);width:130px;">COD ${sortCol==='mat'?ar(sortAsc):''}</th>
+            <th class="sort-th" data-c="desc" style="cursor:pointer;text-align:left;padding:10px 12px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--border);">DESCRIÇÃO ${sortCol==='desc'?ar(sortAsc):''}</th>
+            <th class="sort-th" data-c="qty" style="cursor:pointer;text-align:right;padding:10px 12px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--border);width:80px;">QTD ${sortCol==='qty'?ar(sortAsc):''}</th>
+            <th class="sort-th" data-c="mins" style="cursor:pointer;text-align:right;padding:10px 12px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--border);width:110px;">MIN PEÇA ${sortCol==='mins'?ar(sortAsc):''}</th>
+            ${hasSetupCols?`<th style="text-align:center;padding:10px 12px;font-family:'JetBrains Mono',monospace;font-size:10px;color:#8b5cf6;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--border);width:110px;">Qtd Setup/sem</th>
+            <th style="text-align:center;padding:10px 12px;font-family:'JetBrains Mono',monospace;font-size:10px;color:#8b5cf6;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--border);width:100px;">Min/Setup</th>
+            <th style="text-align:right;padding:10px 12px;font-family:'JetBrains Mono',monospace;font-size:10px;color:#8b5cf6;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--border);width:100px;">Total Setup</th>`:''}
+            ${isAntes?'':`<th style="text-align:center;padding:10px 12px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--border);width:180px;">Mover Para</th>
+            <th style="width:50px;border-bottom:2px solid var(--border);"></th>`}
           </tr></thead>
           <tbody>${sorted.map((item,i)=>{
             const bw=Math.round(item.mins/maxM*100);
             const fromOther=!isAntes&&item._origCt&&item._origCt!==ct;
             const itemSetup=(item._setupQty!=null&&item._setupMin!=null)?item._setupQty*item._setupMin:null;
-            return`<tr ${fromOther?'style="background:rgba(34,197,94,.05)"':''}>
-              <td style="font-family:JetBrains Mono,monospace;font-size:9px;color:var(--accent3)">${item.mat}
-                ${fromOther?`<div style="font-size:8px;color:#22c55e;margin-top:2px">↳ veio de ${item._origCt}</div>`:''}
+            return`<tr style="border-bottom:1px solid var(--border);${fromOther?'background:rgba(34,197,94,.05)':''}">
+              <td style="padding:14px 12px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent3);vertical-align:top;">${item.mat}
+                ${fromOther?`<div style="font-size:9px;color:#22c55e;margin-top:4px;">↳ veio de ${item._origCt}</div>`:''}
               </td>
-              <td style="font-size:11px;word-break:break-word;line-height:1.3">${item.desc}</td>
-              <td style="font-family:JetBrains Mono,monospace;font-size:10px;text-align:right;color:var(--text2)">${Math.round(item.qtyTotal)}</td>
-              <td style="font-family:JetBrains Mono,monospace;font-size:10px;text-align:right;color:var(--accent3)">${item.mins.toFixed(1)}<div style="height:3px;background:var(--s4);border-radius:1px;margin-top:2px"><div style="height:100%;width:${bw}%;background:var(--accent2);border-radius:1px"></div></div></td>
+              <td style="padding:14px 12px;font-size:13px;color:var(--text);vertical-align:top;line-height:1.4;">${item.desc}</td>
+              <td style="padding:14px 12px;font-family:'JetBrains Mono',monospace;font-size:12px;text-align:right;color:var(--text2);vertical-align:top;">${Math.round(item.qtyTotal)}</td>
+              <td style="padding:14px 12px;font-family:'JetBrains Mono',monospace;font-size:12px;text-align:right;color:var(--accent3);vertical-align:top;">
+                ${item.mins.toFixed(1)}
+                <div style="height:4px;background:var(--s4);border-radius:2px;margin-top:5px;width:100%;"><div style="height:100%;width:${bw}%;background:var(--accent2);border-radius:2px;"></div></div>
+              </td>
               ${hasSetupCols?(itemSetup!=null?`
-              <td style="text-align:center">
+              <td style="padding:10px 12px;text-align:center;vertical-align:top;">
                 <input type="number" min="0" step="1" value="${item._setupQty}" data-mat="${item.mat}" data-ct="${ct}" data-field="setupQty" ${isAntes?'disabled':''}
-                  class="test-setup-input" style="width:48px;background:${isAntes?'var(--bg)':'var(--s1)'};border:1px solid var(--border2);color:#8b5cf6;font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 4px;text-align:center;${isAntes?'opacity:.5':''}">
+                  class="test-setup-input" style="width:64px;background:${isAntes?'var(--bg)':'var(--s1)'};border:1px solid var(--border2);color:#8b5cf6;font-family:'JetBrains Mono',monospace;font-size:12px;padding:6px 8px;text-align:center;border-radius:3px;${isAntes?'opacity:.5':''}">
               </td>
-              <td style="text-align:center">
+              <td style="padding:10px 12px;text-align:center;vertical-align:top;">
                 <input type="number" min="0" step="5" value="${item._setupMin}" data-mat="${item.mat}" data-ct="${ct}" data-field="setupMin" ${isAntes?'disabled':''}
-                  class="test-setup-input" style="width:48px;background:${isAntes?'var(--bg)':'var(--s1)'};border:1px solid var(--border2);color:#8b5cf6;font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 4px;text-align:center;${isAntes?'opacity:.5':''}">
+                  class="test-setup-input" style="width:64px;background:${isAntes?'var(--bg)':'var(--s1)'};border:1px solid var(--border2);color:#8b5cf6;font-family:'JetBrains Mono',monospace;font-size:12px;padding:6px 8px;text-align:center;border-radius:3px;${isAntes?'opacity:.5':''}">
               </td>
-              <td style="font-family:JetBrains Mono,monospace;font-size:10px;text-align:right;color:#8b5cf6;font-weight:700">${fmtH(itemSetup)}</td>
+              <td style="padding:14px 12px;font-family:'JetBrains Mono',monospace;font-size:13px;text-align:right;color:#8b5cf6;font-weight:700;vertical-align:top;">${fmtH(itemSetup)}</td>
               `:'<td></td><td></td><td></td>'):''}
-              ${isAntes?'':`<td style="text-align:center">
-                <select class="test-move-sel" data-mat="${item.mat}" data-from="${ct}" style="width:100%;background:var(--bg);border:1px solid var(--border2);color:var(--text2);font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 4px;">
+              ${isAntes?'':`<td style="padding:10px 12px;text-align:center;vertical-align:top;">
+                <select class="test-move-sel" data-mat="${item.mat}" data-from="${ct}" style="width:100%;background:var(--bg);border:1px solid var(--border2);color:var(--text2);font-family:'JetBrains Mono',monospace;font-size:11px;padding:6px 8px;border-radius:3px;">
                   <option value="">— manter aqui —</option>
                   ${otherCTs.map(dst=>`<option value="${dst}">${dst}</option>`).join('')}
                 </select>
               </td>
-              <td style="text-align:center">
+              <td style="padding:10px 12px;text-align:center;vertical-align:top;">
                 <button class="test-del-item" data-mat="${item.mat}" data-ct="${ct}" title="Excluir item da simulação"
-                  style="background:transparent;border:1px solid var(--border2);color:var(--text3);width:22px;height:22px;cursor:pointer;border-radius:2px;font-size:11px;line-height:1;transition:all .15s;"
+                  style="background:transparent;border:1px solid var(--border2);color:var(--text3);width:30px;height:30px;cursor:pointer;border-radius:4px;font-size:14px;line-height:1;transition:all .15s;"
                   onmouseenter="this.style.borderColor='#ef4444';this.style.color='#ef4444'"
                   onmouseleave="this.style.borderColor='var(--border2)';this.style.color='var(--text3)'">✕</button>
               </td>`}
             </tr>`;
           }).join('')}
-          ${hasSetupCols?`<tr style="border-top:1px solid var(--border2);background:rgba(139,92,246,.06)">
-              <td colspan="4" style="font-family:JetBrains Mono,monospace;font-size:9px;color:#8b5cf6;padding:5px 8px;text-align:right">
+          ${hasSetupCols?`<tr style="border-top:2px solid var(--border2);background:rgba(139,92,246,.08);">
+              <td colspan="4" style="padding:12px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#8b5cf6;text-align:right;font-weight:700;">
                 ⚙ TOTAL SETUP (soma dos itens)
               </td>
               <td colspan="2"></td>
-              <td style="font-family:JetBrains Mono,monospace;font-size:9px;color:#8b5cf6;text-align:right;font-weight:700">${fmtH(setup)}</td>
+              <td style="padding:12px;font-family:'JetBrains Mono',monospace;font-size:13px;text-align:right;color:#8b5cf6;font-weight:800;">${fmtH(setup)}</td>
               ${isAntes?'':'<td></td><td></td>'}
             </tr>`:''}
           </tbody>
-        </table>`;
-        })():'<div style="color:var(--text3);font-size:11px;padding:12px 0">Nenhum componente</div>'}
+        </table>`:'<div style="color:var(--text3);font-size:13px;padding:40px 0;text-align:center;">Nenhum componente</div>'}
       </div>
-      ${(items.length&&!isAntes)?`<div style="padding:10px 14px;border-top:1px solid var(--border);display:flex;gap:8px;">
-        <button class="calc-all" id="testApplyBtn" style="flex:1;">✓ Aplicar Movimentações</button>
+      ${(items.length&&!isAntes)?`<div style="padding:16px 28px;border-top:1px solid var(--border);background:var(--s1);flex-shrink:0;">
+        <button class="calc-all" id="testApplyBtn" style="width:100%;padding:13px;font-size:13px;">✓ Aplicar Movimentações</button>
       </div>`:''}
     `;
     document.getElementById('testDetClose')?.addEventListener('click',()=>{panel.classList.add('closed');});
