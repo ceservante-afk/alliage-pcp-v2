@@ -1271,6 +1271,21 @@ const CT_SETUP_MIN={
   'ESTA-032':60,
 };
 
+// Padrão de qtd/tempo de setup por item, usado como valor inicial editável no Ambiente de Testes.
+// 'manual' = CTs de solda manual (ESTA-009/033): 1 setup de 30min = 30min total
+// 'robo'   = CTs robotizados (ESTA-020/028/032): 2 setups de 30min/semana = 60min total
+const CT_SETUP_DEFAULT={
+  'ESTA-009':{qty:1,min:30},
+  'ESTA-033':{qty:1,min:30},
+  'ESTA-020':{qty:2,min:30},
+  'ESTA-028':{qty:2,min:30},
+  'ESTA-032':{qty:2,min:30},
+};
+
+function getSetupDefault(ct){
+  return CT_SETUP_DEFAULT[ct]||{qty:0,min:0};
+}
+
 function explodeTree(node, qtyPA, compMap){
   if(!node||!node.children)return;
   for(const child of node.children){
@@ -1502,8 +1517,17 @@ function startTestEnv(){
   const{ctMap,compMap}=getGlobalMaps();
   TEST_CTMAP=_deepCloneMap(ctMap);
   TEST_COMPMAP=_deepCloneMap(compMap);
+  // Inicializa setup customizável por item (qty × min) com o padrão do CT — só onde aplicável
+  for(const ct of Object.keys(TEST_COMPMAP)){
+    const def=getSetupDefault(ct);
+    if(!def.qty)continue;
+    for(const item of TEST_COMPMAP[ct]){
+      if(item._setupQty==null)item._setupQty=def.qty;
+      if(item._setupMin==null)item._setupMin=def.min;
+    }
+  }
   TEST_ORIGINAL_CTMAP=_deepCloneMap(ctMap);
-  TEST_ORIGINAL_COMPMAP=_deepCloneMap(compMap);
+  TEST_ORIGINAL_COMPMAP=_deepCloneMap(TEST_COMPMAP);
   TEST_MIGRATED=true; // snapshot capturado corretamente na origem — não precisa de migração futura
   TEST_ACTIVE=true;
   saveTestEnv();
@@ -1544,7 +1568,7 @@ function renderTestSim(){
   entries.sort((a,b)=>ctLoad(a[1])-ctLoad(b[1]));
 
   const tbl=document.createElement('table');tbl.className='ctt';
-  tbl.innerHTML=`<colgroup><col style="width:200px"><col style="width:85px"><col style="width:75px"><col style="width:56px"><col style="width:62px"><col style="width:48px"><col style="width:58px"><col style="width:64px"><col style="width:90px"><col style="width:68px"><col style="width:76px"></colgroup><thead><tr><th>CT</th><th>Carga</th><th>Cap.</th><th style="text-align:center">Turnos</th><th style="text-align:center">H/Turno</th><th style="text-align:center">Dias</th><th style="text-align:center">Efic %</th><th>%</th><th>Ocupação</th><th>Status</th><th style="text-align:right">Ações</th></tr></thead>`;
+  tbl.innerHTML=`<colgroup><col style="width:190px"><col style="width:72px"><col style="width:78px"><col style="width:78px"><col style="width:78px"><col style="width:52px"><col style="width:58px"><col style="width:44px"><col style="width:54px"><col style="width:58px"><col style="width:84px"><col style="width:62px"><col style="width:72px"></colgroup><thead><tr><th>CT</th><th>Cap.</th><th>Carga Peça</th><th>Carga Setup</th><th>Carga Total</th><th style="text-align:center">Turnos</th><th style="text-align:center">H/Turno</th><th style="text-align:center">Dias</th><th style="text-align:center">Efic %</th><th>%</th><th>Ocupação</th><th>Status</th><th style="text-align:right">Ações</th></tr></thead>`;
   const tbody=document.createElement('tbody');
 
   entries.forEach(([ct,val])=>{
@@ -1577,8 +1601,10 @@ function renderTestSim(){
       <td><div class="ct-name" style="color:${rowColor};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${ct}${changed?' <span style="color:#f59e0b;font-size:9px">●</span>':''}</div>
           <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</div>
           ${incomingCount&&TEST_VIEW_MODE==='depois'?`<div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:#22c55e;margin-top:2px">↳ ${incomingCount} recebido(s)</div>`:''}</td>
-      <td class="ct-load-val">${fmtH(load)}</td>
       <td class="ct-cap-val">${fmtH(cap)}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2)">${fmtH(proc)}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#8b5cf6">${fmtH(setup)}</td>
+      <td class="ct-load-val">${fmtH(load)}</td>
       <td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center" data-field="turnos">${s.turnos}</td>
       <td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center" data-field="hturno">${s.hturno}</td>
       <td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center" data-field="dias">${s.dias}</td>
@@ -1741,17 +1767,21 @@ function openTestDetail(ct){
         Selecione o CT de destino em uma ou mais linhas e clique em "Aplicar Movimentações"
       </div>`}
       <div class="det-scroll">
-        ${sorted.length?`<table class="det-ops" style="width:100%;table-layout:auto">
+        ${sorted.length?(()=>{
+          const hasSetupCols=!!getSetupDefault(ct).qty || sorted.some(it=>it._setupQty!=null);
+          return`<table class="det-ops" style="width:100%;table-layout:auto">
           <thead><tr>
-            <th class="sort-th" data-c="mat" style="width:100px;cursor:pointer">COD ${sortCol==='mat'?ar(sortAsc):''}</th>
+            <th class="sort-th" data-c="mat" style="width:90px;cursor:pointer">COD ${sortCol==='mat'?ar(sortAsc):''}</th>
             <th class="sort-th" data-c="desc" style="cursor:pointer">DESCRIÇÃO ${sortCol==='desc'?ar(sortAsc):''}</th>
-            <th class="sort-th" data-c="qty" style="width:64px;cursor:pointer;text-align:right">QTD ${sortCol==='qty'?ar(sortAsc):''}</th>
-            <th class="sort-th" data-c="mins" style="width:72px;cursor:pointer;text-align:right">TOTAL MIN ${sortCol==='mins'?ar(sortAsc):''}</th>
-            ${isAntes?'':'<th style="width:150px;text-align:center">MOVER PARA</th><th style="width:32px;text-align:center"></th>'}
+            <th class="sort-th" data-c="qty" style="width:56px;cursor:pointer;text-align:right">QTD ${sortCol==='qty'?ar(sortAsc):''}</th>
+            <th class="sort-th" data-c="mins" style="width:64px;cursor:pointer;text-align:right">MIN PEÇA ${sortCol==='mins'?ar(sortAsc):''}</th>
+            ${hasSetupCols?'<th style="width:62px;text-align:center">QTD SETUP/SEM</th><th style="width:62px;text-align:center">MIN/SETUP</th><th style="width:66px;text-align:right">TOTAL SETUP</th>':''}
+            ${isAntes?'':'<th style="width:140px;text-align:center">MOVER PARA</th><th style="width:30px;text-align:center"></th>'}
           </tr></thead>
           <tbody>${sorted.map((item,i)=>{
             const bw=Math.round(item.mins/maxM*100);
             const fromOther=!isAntes&&item._origCt&&item._origCt!==ct;
+            const itemSetup=(item._setupQty!=null&&item._setupMin!=null)?item._setupQty*item._setupMin:null;
             return`<tr ${fromOther?'style="background:rgba(34,197,94,.05)"':''}>
               <td style="font-family:JetBrains Mono,monospace;font-size:9px;color:var(--accent3)">${item.mat}
                 ${fromOther?`<div style="font-size:8px;color:#22c55e;margin-top:2px">↳ veio de ${item._origCt}</div>`:''}
@@ -1759,6 +1789,17 @@ function openTestDetail(ct){
               <td style="font-size:11px;word-break:break-word;line-height:1.3">${item.desc}</td>
               <td style="font-family:JetBrains Mono,monospace;font-size:10px;text-align:right;color:var(--text2)">${Math.round(item.qtyTotal)}</td>
               <td style="font-family:JetBrains Mono,monospace;font-size:10px;text-align:right;color:var(--accent3)">${item.mins.toFixed(1)}<div style="height:3px;background:var(--s4);border-radius:1px;margin-top:2px"><div style="height:100%;width:${bw}%;background:var(--accent2);border-radius:1px"></div></div></td>
+              ${hasSetupCols?(itemSetup!=null?`
+              <td style="text-align:center">
+                <input type="number" min="0" step="1" value="${item._setupQty}" data-mat="${item.mat}" data-ct="${ct}" data-field="setupQty" ${isAntes?'disabled':''}
+                  class="test-setup-input" style="width:48px;background:${isAntes?'var(--bg)':'var(--s1)'};border:1px solid var(--border2);color:#8b5cf6;font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 4px;text-align:center;${isAntes?'opacity:.5':''}">
+              </td>
+              <td style="text-align:center">
+                <input type="number" min="0" step="5" value="${item._setupMin}" data-mat="${item.mat}" data-ct="${ct}" data-field="setupMin" ${isAntes?'disabled':''}
+                  class="test-setup-input" style="width:48px;background:${isAntes?'var(--bg)':'var(--s1)'};border:1px solid var(--border2);color:#8b5cf6;font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 4px;text-align:center;${isAntes?'opacity:.5':''}">
+              </td>
+              <td style="font-family:JetBrains Mono,monospace;font-size:10px;text-align:right;color:#8b5cf6;font-weight:700">${fmtH(itemSetup)}</td>
+              `:'<td></td><td></td><td></td>'):''}
               ${isAntes?'':`<td style="text-align:center">
                 <select class="test-move-sel" data-mat="${item.mat}" data-from="${ct}" style="width:100%;background:var(--bg);border:1px solid var(--border2);color:var(--text2);font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 4px;">
                   <option value="">— manter aqui —</option>
@@ -1773,20 +1814,17 @@ function openTestDetail(ct){
               </td>`}
             </tr>`;
           }).join('')}
-          ${(()=>{
-            const setupMin=CT_SETUP_MIN[ct];
-            if(!setupMin||!sorted.length)return'';
-            return`<tr style="border-top:1px solid var(--border2);background:rgba(139,92,246,.06)">
-              <td colspan="2" style="font-family:JetBrains Mono,monospace;font-size:9px;color:#8b5cf6;padding:5px 8px">
-                ⚙ SETUP &nbsp;·&nbsp; ${sorted.length} itens × ${setupMin}min = ${fmtH(setup)}
+          ${hasSetupCols?`<tr style="border-top:1px solid var(--border2);background:rgba(139,92,246,.06)">
+              <td colspan="4" style="font-family:JetBrains Mono,monospace;font-size:9px;color:#8b5cf6;padding:5px 8px;text-align:right">
+                ⚙ TOTAL SETUP (soma dos itens)
               </td>
-              <td style="font-family:JetBrains Mono,monospace;font-size:9px;color:#8b5cf6;text-align:right">${sorted.length}</td>
+              <td colspan="2"></td>
               <td style="font-family:JetBrains Mono,monospace;font-size:9px;color:#8b5cf6;text-align:right;font-weight:700">${fmtH(setup)}</td>
               ${isAntes?'':'<td></td><td></td>'}
-            </tr>`;
-          })()}
+            </tr>`:''}
           </tbody>
-        </table>`:'<div style="color:var(--text3);font-size:11px;padding:12px 0">Nenhum componente</div>'}
+        </table>`;
+        })():'<div style="color:var(--text3);font-size:11px;padding:12px 0">Nenhum componente</div>'}
       </div>
       ${(items.length&&!isAntes)?`<div style="padding:10px 14px;border-top:1px solid var(--border);display:flex;gap:8px;">
         <button class="calc-all" id="testApplyBtn" style="flex:1;">✓ Aplicar Movimentações</button>
@@ -1797,6 +1835,18 @@ function openTestDetail(ct){
       const c=th.dataset.c;if(sortCol===c)sortAsc=!sortAsc;else{sortCol=c;sortAsc=(c==='mat'||c==='desc');}buildTable();
     }));
     document.getElementById('testApplyBtn')?.addEventListener('click',()=>applyTestMoves(ct));
+    panel.querySelectorAll('.test-setup-input').forEach(inp=>inp.addEventListener('change',()=>{
+      const mat=inp.dataset.mat,setupCt=inp.dataset.ct,field=inp.dataset.field;
+      const val=Math.max(0,parseFloat(inp.value)||0);
+      const target=(TEST_COMPMAP[setupCt]||[]).find(it=>it.mat===mat);
+      if(!target)return;
+      if(field==='setupQty')target._setupQty=val;
+      else target._setupMin=val;
+      _recalcTestCT(setupCt);
+      saveTestEnv();
+      buildTable();
+      renderTestSim();
+    }));
     panel.querySelectorAll('.test-del-item').forEach(btn=>btn.addEventListener('click',()=>{
       const mat=btn.dataset.mat,delCt=btn.dataset.ct;
       const matDesc=items.find(it=>it.mat===mat)?.desc||mat;
@@ -1830,11 +1880,16 @@ function applyTestMoves(fromCt){
     if(!TEST_COMPMAP[toCt])TEST_COMPMAP[toCt]=[];
     const existing=TEST_COMPMAP[toCt].find(i=>i.mat===mat);
     const tagCt=origCt===toCt?undefined:origCt; // se voltou pra origem, remove a marcação
+    // Setup customizado é resetado para o padrão do CT de destino — não viaja com o item
+    const destDefault=getSetupDefault(toCt);
     if(existing){
       existing.qtyTotal+=item.qtyTotal;
       existing.mins+=item.mins;
     } else {
-      TEST_COMPMAP[toCt].push({...item,_origCt:tagCt});
+      const newItem={...item,_origCt:tagCt};
+      if(destDefault.qty){newItem._setupQty=destDefault.qty;newItem._setupMin=destDefault.min;}
+      else{delete newItem._setupQty;delete newItem._setupMin;}
+      TEST_COMPMAP[toCt].push(newItem);
     }
     movedCount++;
   }
@@ -1844,13 +1899,7 @@ function applyTestMoves(fromCt){
   // Recalculate load_min and setup_min for ALL affected CTs (origin + all destinations)
   const affected=new Set([fromCt,...selects.map(s=>s.value).filter(Boolean)]);
   for(const ct of affected){
-    const items=TEST_COMPMAP[ct]||[];
-    const processMin=items.reduce((s,it)=>s+it.mins,0);
-    const setupPerItem=CT_SETUP_MIN[ct]||0;
-    const setupMin=setupPerItem*items.length;
-    if(!TEST_CTMAP[ct])TEST_CTMAP[ct]={load_min:0,setup_min:0};
-    TEST_CTMAP[ct].load_min=processMin+setupMin;
-    TEST_CTMAP[ct].setup_min=setupMin;
+    _recalcTestCT(ct);
     // Auto-include destination CTs in the visible list if not already there
     if(!TEST_SELECTED_CTS.includes(ct))TEST_SELECTED_CTS.push(ct);
   }
@@ -1860,12 +1909,16 @@ function applyTestMoves(fromCt){
   renderTestSim();
 }
 
-// Recalcula load_min/setup_min de um CT a partir do compMap atual da simulação
+// Recalcula load_min/setup_min de um CT a partir do compMap atual da simulação.
+// Setup é a soma do setup customizado por item (_setupQty × _setupMin), quando definido;
+// itens sem customização (CTs fora da solda) não somam setup.
 function _recalcTestCT(ct){
   const items=TEST_COMPMAP[ct]||[];
   const processMin=items.reduce((s,it)=>s+it.mins,0);
-  const setupPerItem=CT_SETUP_MIN[ct]||0;
-  const setupMin=setupPerItem*items.length;
+  const setupMin=items.reduce((s,it)=>{
+    if(it._setupQty!=null&&it._setupMin!=null)return s+(it._setupQty*it._setupMin);
+    return s;
+  },0);
   if(!TEST_CTMAP[ct])TEST_CTMAP[ct]={load_min:0,setup_min:0};
   TEST_CTMAP[ct].load_min=processMin+setupMin;
   TEST_CTMAP[ct].setup_min=setupMin;
