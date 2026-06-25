@@ -460,7 +460,10 @@ table.ctt th{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--te
       </div>
     </div>
     <div id="testSimWrap" style="display:none;flex:1;overflow:hidden;flex-direction:column;">
-      <div id="testChangesPanel" style="display:none;padding:10px 16px;background:rgba(245,158,11,.06);border-bottom:1px solid var(--border);"></div>
+      <div id="testSummaryBar" style="display:none;padding:10px 16px;background:rgba(245,158,11,.06);border-bottom:1px solid var(--border);align-items:center;gap:16px;">
+        <div id="testChangesPanel" style="flex:1;min-width:0;"></div>
+        <div id="testCapacitySummary" style="flex-shrink:0;"></div>
+      </div>
       <div class="ct-scroll" id="testCTBody" style="flex:1;overflow-y:auto;"></div>
     </div>
   </div>
@@ -1723,20 +1726,59 @@ function inlineEditTestCT(ct,btn){
 
 
 function renderTestChangesPanel(){
+  const bar=document.getElementById('testSummaryBar');
   const panel=document.getElementById('testChangesPanel');
-  if(!panel)return;
+  const capBox=document.getElementById('testCapacitySummary');
+  if(!bar||!panel||!capBox)return;
+
+  const mode=TEST_VIEW_MODE;
   const changes=[];
+  let totalCap=0,totalLoad=0;
   for(const ct of TEST_SELECTED_CTS){
     const cur=TEST_CTMAP[ct]||{load_min:0,setup_min:0};
     const orig=TEST_ORIGINAL_CTMAP[ct]||{load_min:0,setup_min:0};
-    const cap=testCapMin(ct);
+    const cap=testCapMin(ct,mode);
     const curPct=cap>0?Math.round(ctLoad(cur)/cap*100):0;
     const origPct=cap>0?Math.round(ctLoad(orig)/cap*100):0;
     if(curPct!==origPct)changes.push({ct,origPct,curPct});
+    // Agregado geral respeita o modo de visualização ativo
+    const showVal=mode==='antes'?orig:cur;
+    totalCap+=cap;
+    totalLoad+=ctLoad(showVal);
   }
   changes.sort((a,b)=>a.curPct-b.curPct);
-  if(!changes.length||TEST_VIEW_MODE==='antes'){panel.style.display='none';return;}
-  panel.style.display='';
+
+  // Card de capacidade geral — sempre visível enquanto há CTs selecionados
+  if(TEST_SELECTED_CTS.length){
+    bar.style.display='flex';
+    const totalPct=totalCap>0?Math.round(totalLoad/totalCap*100):0;
+    const col=totalPct>=100?'#ef4444':totalPct>=80?'#f59e0b':'#22c55e';
+    capBox.innerHTML=`<div style="display:flex;align-items:center;gap:18px;padding:8px 18px;background:var(--s2);border:1px solid var(--border);border-radius:4px;">
+      <div style="text-align:right;">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;">Capacidade Geral</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-top:2px;">${TEST_SELECTED_CTS.length} CT(s) · ${mode==='antes'?'antes':'depois'}</div>
+      </div>
+      <div style="border-left:1px solid var(--border);padding-left:18px;text-align:right;">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);">Cap.</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:var(--text2);">${fmtH(totalCap)}</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);">Consumido</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:var(--text);">${fmtH(totalLoad)}</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);">Ocupação</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:800;color:${col};">${totalPct}%</div>
+      </div>
+    </div>`;
+  } else {
+    bar.style.display='none';
+  }
+
+  if(!changes.length||mode==='antes'){
+    panel.innerHTML='';
+    return;
+  }
   panel.innerHTML=`<div style="font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;color:var(--text3);letter-spacing:.08em;margin-bottom:6px;">${changes.length} CT(S) ALTERADO(S)</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       ${changes.map(c=>{
