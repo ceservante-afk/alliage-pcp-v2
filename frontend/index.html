@@ -1418,6 +1418,9 @@ let TEST_CTMAP=null;           // clone de ctMap, mutável pela simulação
 let TEST_COMPMAP=null;         // clone de compMap, mutável pela simulação
 let TEST_ORIGINAL_CTMAP=null;  // snapshot original para comparação
 let TEST_ORIGINAL_COMPMAP=null;// snapshot original dos componentes por CT (para modo ANTES no drill-down)
+// Parâmetros (turnos/h-turno/efic) isolados por modo de visualização — nunca tocam em ctSets real.
+// Estrutura: {ANTES:{ct:{turnos,hturno,efic}}, DEPOIS:{ct:{...}}}
+let TEST_PARAMS={antes:{},depois:{}};
 let TEST_MIGRATED=false;       // marca se a migração defensiva já rodou nesta simulação
 let TEST_ACTIVE=false;
 const TEST_STORAGE_KEY='pcp_test_env_v1';
@@ -1441,6 +1444,7 @@ function saveTestEnv(){
       originalComp:TEST_ORIGINAL_COMPMAP,
       migrated:TEST_MIGRATED,
       active:TEST_ACTIVE,
+      params:TEST_PARAMS,
     }));
   }catch(e){console.warn('saveTestEnv error',e);}
 }
@@ -1457,6 +1461,7 @@ function loadTestEnv(){
     TEST_ORIGINAL_COMPMAP=obj.originalComp||null;
     TEST_MIGRATED=!!obj.migrated;
     TEST_ACTIVE=!!obj.active;
+    TEST_PARAMS=obj.params||{antes:{},depois:{}};
     return TEST_ACTIVE;
   }catch(e){return false;}
 }
@@ -1473,6 +1478,10 @@ function initTestTab(){
       TEST_ORIGINAL_CTMAP=_deepCloneMap(realCtMap);
       TEST_MIGRATED=true;
       saveTestEnv();
+    }
+    // Guard defensivo: sessões salvas antes de TEST_PARAMS existir
+    if(!TEST_PARAMS||!TEST_PARAMS.antes||!TEST_PARAMS.depois){
+      TEST_PARAMS={antes:TEST_PARAMS?.antes||{},depois:TEST_PARAMS?.depois||{}};
     }
     showTestSim();
   } else {
@@ -1540,6 +1549,7 @@ function resetTestEnv(){
   if(!confirm('Resetar a simulação? Todas as movimentações feitas serão descartadas.'))return;
   localStorage.removeItem(TEST_STORAGE_KEY);
   TEST_SELECTED_CTS=[];TEST_CTMAP=null;TEST_COMPMAP=null;TEST_ORIGINAL_CTMAP=null;TEST_ORIGINAL_COMPMAP=null;TEST_MIGRATED=false;TEST_ACTIVE=false;
+  TEST_PARAMS={antes:{},depois:{}};
   showTestSelector();
 }
 
@@ -1551,9 +1561,28 @@ function showTestSim(){
   renderTestSim();
 }
 
-function testCapMin(ct){
-  // Usa exatamente os mesmos parâmetros configurados em ctSets — não duplica lógica
-  return capMin(ct);
+// Retorna os parâmetros de capacidade (turnos/h-turno/efic/dias) para o CT no modo de
+// visualização atual do Ambiente de Testes. Se houver override isolado (TEST_PARAMS),
+// usa ele; senão cai no defS() real (mesmo usado pela Análise de Capacidade).
+// Dias nunca é sobrescrito — sempre vem do slicer de período real.
+function testDefS(ct,mode){
+  const real=defS(ct);
+  const override=(TEST_PARAMS[mode]||{})[ct];
+  if(!override)return real;
+  return{
+    turnos:override.turnos??real.turnos,
+    hturno:override.hturno??real.hturno,
+    dias:real.dias, // dias sempre vem do slicer real, nunca isolado
+    efic:override.efic??real.efic,
+  };
+}
+
+function testCapMin(ct,mode){
+  mode=mode||TEST_VIEW_MODE;
+  const s=testDefS(ct,mode);
+  if(isInactive(ct))return 0;
+  const hc=parseFloat(ctSets[ct]?.hc)||1;
+  return s.turnos*s.hturno*s.dias*(s.efic/100)*hc*60;
 }
 
 let TEST_VIEW_MODE='depois'; // 'depois' | 'antes' — toggle de visualização
@@ -1562,8 +1591,13 @@ function renderTestSim(){
   const body=document.getElementById('testCTBody');
   if(!body)return;
 
-  // Remove painel de detalhe antigo antes de recriar (evita acúmulo/visual borrado)
-  document.getElementById('testDetPanel')?.remove();
+  // Só recria o painel de detalhe se ele não existir ou estiver fechado.
+  // Nunca destrói um painel aberto — evita "sair da tela" ao editar campos dentro dele
+  // (ex: spinners de setup, que disparam renderTestSim para atualizar a lista de fundo).
+  const existingDet=document.getElementById('testDetPanel');
+  if(existingDet&&existingDet.classList.contains('closed')){
+    existingDet.remove();
+  }
 
   let entries=TEST_SELECTED_CTS.map(ct=>[ct,TEST_CTMAP[ct]||{load_min:0,setup_min:0}]);
   // Ordena sempre do menor para o maior em carga (minutos)
@@ -1577,7 +1611,7 @@ function renderTestSim(){
     const origVal=TEST_ORIGINAL_CTMAP[ct]||{load_min:0,setup_min:0};
     const showVal=TEST_VIEW_MODE==='antes'?origVal:val;
     const load=ctLoad(showVal),setup=ctSetup(showVal),proc=load-setup;
-    const s=defS(ct);const cap=testCapMin(ct);
+    const s=testDefS(ct,TEST_VIEW_MODE);const cap=testCapMin(ct,TEST_VIEW_MODE);
     const pct=cap>0?Math.round(load/cap*100):0;
     const col=semC(pct,false);const bw=Math.min(pct,100);
     const name=CT_NAMES[ct]||'';
@@ -1624,7 +1658,9 @@ function renderTestSim(){
 
   body.innerHTML='';
   tbl.appendChild(tbody);body.appendChild(tbl);
-  const det=document.createElement('div');det.className='test-detail-fullscreen closed';det.id='testDetPanel';document.body.appendChild(det);
+  if(!document.getElementById('testDetPanel')){
+    const det=document.createElement('div');det.className='test-detail-fullscreen closed';det.id='testDetPanel';document.body.appendChild(det);
+  }
 
   renderTestChangesPanel();
   updateTestViewToggle();
@@ -1647,22 +1683,23 @@ function inlineEditTestCT(ct,btn){
   if(!isAdmin())return;
   const row=btn.closest('tr');
   const isEditing=row.classList.contains('ct-editing');
+  const mode=TEST_VIEW_MODE; // edita só o parâmetro do modo atualmente visível
 
   if(isEditing){
-    const s=defS(ct);
+    const s=testDefS(ct,mode);
+    if(!TEST_PARAMS[mode][ct])TEST_PARAMS[mode][ct]={};
     row.querySelectorAll('td[data-field]').forEach(td=>{
       const f=td.dataset.field;
       const inp=td.querySelector('input');
       if(inp&&!inp.readOnly){
         const val=parseFloat(inp.value)||s[f];
-        if(!ctSets[ct])ctSets[ct]={};
-        ctSets[ct][f]=val;
+        TEST_PARAMS[mode][ct][f]=val;
       }
     });
-    saveCtSets();
+    saveTestEnv();
     renderTestSim(); // re-render completo já reflete o novo capMin
   } else {
-    const s=defS(ct);
+    const s=testDefS(ct,mode);
     const fields={turnos:{min:1,max:3,step:1},hturno:{min:1,max:24,step:0.1},dias:{min:1,max:31,step:1,readonly:true},efic:{min:1,max:100,step:1}};
     row.querySelectorAll('td[data-field]').forEach(td=>{
       const f=td.dataset.field;
@@ -1832,7 +1869,7 @@ function openTestDetail(ct){
                 <input type="number" min="0" step="5" value="${item._setupMin}" data-mat="${item.mat}" data-ct="${ct}" data-field="setupMin" ${isAntes?'disabled':''}
                   class="test-setup-input" style="width:64px;background:${isAntes?'var(--bg)':'var(--s1)'};border:1px solid var(--border2);color:#8b5cf6;font-family:'JetBrains Mono',monospace;font-size:12px;padding:6px 8px;text-align:center;border-radius:3px;${isAntes?'opacity:.5':''}">
               </td>
-              <td style="padding:14px 12px;font-family:'JetBrains Mono',monospace;font-size:13px;text-align:right;color:#8b5cf6;font-weight:700;vertical-align:top;">${fmtH(itemSetup)}</td>
+              <td data-setup-total style="padding:14px 12px;font-family:'JetBrains Mono',monospace;font-size:13px;text-align:right;color:#8b5cf6;font-weight:700;vertical-align:top;">${fmtH(itemSetup)}</td>
               `:'<td></td><td></td><td></td>'):''}
               ${isAntes?'':`<td style="padding:10px 12px;text-align:center;vertical-align:top;">
                 <select class="test-move-sel" data-mat="${item.mat}" data-from="${ct}" style="width:100%;background:var(--bg);border:1px solid var(--border2);color:var(--text2);font-family:'JetBrains Mono',monospace;font-size:11px;padding:6px 8px;border-radius:3px;">
@@ -1853,7 +1890,7 @@ function openTestDetail(ct){
                 ⚙ TOTAL SETUP (soma dos itens)
               </td>
               <td colspan="2"></td>
-              <td style="padding:12px;font-family:'JetBrains Mono',monospace;font-size:13px;text-align:right;color:#8b5cf6;font-weight:800;">${fmtH(setup)}</td>
+              <td data-setup-footer style="padding:12px;font-family:'JetBrains Mono',monospace;font-size:13px;text-align:right;color:#8b5cf6;font-weight:800;">${fmtH(setup)}</td>
               ${isAntes?'':'<td></td><td></td>'}
             </tr>`:''}
           </tbody>
@@ -1877,7 +1914,15 @@ function openTestDetail(ct){
       else target._setupMin=val;
       _recalcTestCT(setupCt);
       saveTestEnv();
-      buildTable();
+      // Atualiza só a célula "Total Setup" da linha e o rodapé — sem reconstruir a tabela
+      // inteira, preservando o foco/posição do scroll no campo que acabou de ser editado.
+      const itemSetup=(target._setupQty!=null&&target._setupMin!=null)?target._setupQty*target._setupMin:null;
+      const row=inp.closest('tr');
+      const totalCell=row?.querySelector('[data-setup-total]');
+      if(totalCell)totalCell.textContent=fmtH(itemSetup);
+      const footerCell=document.querySelector('[data-setup-footer]');
+      if(footerCell)footerCell.textContent=fmtH(ctSetup(TEST_CTMAP[setupCt]||{}));
+      // Atualiza a lista de fundo silenciosamente (painel permanece aberto, sem reconstrução)
       renderTestSim();
     }));
     panel.querySelectorAll('.test-del-item').forEach(btn=>btn.addEventListener('click',()=>{
