@@ -1401,6 +1401,7 @@ let TEST_CTMAP=null;           // clone de ctMap, mutável pela simulação
 let TEST_COMPMAP=null;         // clone de compMap, mutável pela simulação
 let TEST_ORIGINAL_CTMAP=null;  // snapshot original para comparação
 let TEST_ORIGINAL_COMPMAP=null;// snapshot original dos componentes por CT (para modo ANTES no drill-down)
+let TEST_MIGRATED=false;       // marca se a migração defensiva já rodou nesta simulação
 let TEST_ACTIVE=false;
 const TEST_STORAGE_KEY='pcp_test_env_v1';
 
@@ -1421,6 +1422,7 @@ function saveTestEnv(){
       compMap:TEST_COMPMAP,
       original:TEST_ORIGINAL_CTMAP,
       originalComp:TEST_ORIGINAL_COMPMAP,
+      migrated:TEST_MIGRATED,
       active:TEST_ACTIVE,
     }));
   }catch(e){console.warn('saveTestEnv error',e);}
@@ -1436,6 +1438,7 @@ function loadTestEnv(){
     TEST_COMPMAP=obj.compMap||null;
     TEST_ORIGINAL_CTMAP=obj.original||null;
     TEST_ORIGINAL_COMPMAP=obj.originalComp||null;
+    TEST_MIGRATED=!!obj.migrated;
     TEST_ACTIVE=!!obj.active;
     return TEST_ACTIVE;
   }catch(e){return false;}
@@ -1443,14 +1446,15 @@ function loadTestEnv(){
 
 function initTestTab(){
   if(loadTestEnv()&&TEST_ACTIVE){
-    // Migração defensiva: sessões salvas antes desta versão não têm TEST_ORIGINAL_COMPMAP.
-    // Reconstrói o snapshot original a partir da programação REAL atual (getGlobalMaps),
-    // não do estado já mutado da simulação — senão itens já movidos/excluídos ficam perdidos.
-    if(!TEST_ORIGINAL_COMPMAP){
+    // Migração defensiva: roda apenas uma vez, e só se o snapshot nunca foi salvo.
+    // Usa um flag explícito (não apenas !TEST_ORIGINAL_COMPMAP) para nunca recalcular
+    // a partir do estado "real atual" mais de uma vez — isso mudaria o ANTES a cada
+    // edição de parâmetro ou recálculo de programação feito fora da simulação.
+    if(!TEST_ORIGINAL_COMPMAP&&!TEST_MIGRATED){
       const{ctMap:realCtMap,compMap:realCompMap}=getGlobalMaps();
       TEST_ORIGINAL_COMPMAP=_deepCloneMap(realCompMap);
-      // TEST_ORIGINAL_CTMAP também é reconstruído da mesma fonte, para consistência
       TEST_ORIGINAL_CTMAP=_deepCloneMap(realCtMap);
+      TEST_MIGRATED=true;
       saveTestEnv();
     }
     showTestSim();
@@ -1500,6 +1504,7 @@ function startTestEnv(){
   TEST_COMPMAP=_deepCloneMap(compMap);
   TEST_ORIGINAL_CTMAP=_deepCloneMap(ctMap);
   TEST_ORIGINAL_COMPMAP=_deepCloneMap(compMap);
+  TEST_MIGRATED=true; // snapshot capturado corretamente na origem — não precisa de migração futura
   TEST_ACTIVE=true;
   saveTestEnv();
   showTestSim();
@@ -1508,7 +1513,7 @@ function startTestEnv(){
 function resetTestEnv(){
   if(!confirm('Resetar a simulação? Todas as movimentações feitas serão descartadas.'))return;
   localStorage.removeItem(TEST_STORAGE_KEY);
-  TEST_SELECTED_CTS=[];TEST_CTMAP=null;TEST_COMPMAP=null;TEST_ORIGINAL_CTMAP=null;TEST_ORIGINAL_COMPMAP=null;TEST_ACTIVE=false;
+  TEST_SELECTED_CTS=[];TEST_CTMAP=null;TEST_COMPMAP=null;TEST_ORIGINAL_CTMAP=null;TEST_ORIGINAL_COMPMAP=null;TEST_MIGRATED=false;TEST_ACTIVE=false;
   showTestSelector();
 }
 
