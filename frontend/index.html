@@ -1443,6 +1443,13 @@ function loadTestEnv(){
 
 function initTestTab(){
   if(loadTestEnv()&&TEST_ACTIVE){
+    // Migração defensiva: sessões salvas antes desta versão não têm TEST_ORIGINAL_COMPMAP.
+    // Sem o snapshot original real, usamos o estado atual como base (não é o original
+    // histórico, mas evita o crash e permite o modo ANTES funcionar a partir de agora).
+    if(!TEST_ORIGINAL_COMPMAP){
+      TEST_ORIGINAL_COMPMAP=_deepCloneMap(TEST_COMPMAP||{});
+      saveTestEnv();
+    }
     showTestSim();
   } else {
     showTestSelector();
@@ -1678,17 +1685,18 @@ function openTestDetail(ct){
   const cap=testCapMin(ct);
 
   // Respeita o modo de visualização atual (ANTES mostra estado original, DEPOIS mostra simulado)
-  const isAntes=TEST_VIEW_MODE==='antes';
-  const val=(isAntes?TEST_ORIGINAL_CTMAP[ct]:TEST_CTMAP[ct])||{load_min:0,setup_min:0};
+  // Fallback defensivo: sessões salvas antes desta versão não têm TEST_ORIGINAL_COMPMAP
+  const isAntes=TEST_VIEW_MODE==='antes'&&!!TEST_ORIGINAL_COMPMAP;
+  const val=(isAntes?(TEST_ORIGINAL_CTMAP||{})[ct]:(TEST_CTMAP||{})[ct])||{load_min:0,setup_min:0};
   const load=ctLoad(val);
   const setup=ctSetup(val);
   const pct=cap>0?Math.round(load/cap*100):0;
   const col=semC(pct,false);
-  const items=((isAntes?TEST_ORIGINAL_COMPMAP[ct]:TEST_COMPMAP[ct])||[]).slice();
+  const items=((isAntes?(TEST_ORIGINAL_COMPMAP||{})[ct]:(TEST_COMPMAP||{})[ct])||[]).slice();
 
   // Comparação com o outro estado (sempre mostra original vs simulado, independente do modo)
-  const origVal=TEST_ORIGINAL_CTMAP[ct]||{load_min:0,setup_min:0};
-  const curValForCompare=TEST_CTMAP[ct]||{load_min:0,setup_min:0};
+  const origVal=(TEST_ORIGINAL_CTMAP||{})[ct]||{load_min:0,setup_min:0};
+  const curValForCompare=(TEST_CTMAP||{})[ct]||{load_min:0,setup_min:0};
   const origLoad=ctLoad(origVal);
   const origPct=cap>0?Math.round(origLoad/cap*100):0;
   const curPct=cap>0?Math.round(ctLoad(curValForCompare)/cap*100):0;
