@@ -1400,6 +1400,7 @@ let TEST_SELECTED_CTS=[];      // CTs escolhidos na tela de seleção
 let TEST_CTMAP=null;           // clone de ctMap, mutável pela simulação
 let TEST_COMPMAP=null;         // clone de compMap, mutável pela simulação
 let TEST_ORIGINAL_CTMAP=null;  // snapshot original para comparação
+let TEST_ORIGINAL_COMPMAP=null;// snapshot original dos componentes por CT (para modo ANTES no drill-down)
 let TEST_ACTIVE=false;
 const TEST_STORAGE_KEY='pcp_test_env_v1';
 
@@ -1419,6 +1420,7 @@ function saveTestEnv(){
       ctMap:TEST_CTMAP,
       compMap:TEST_COMPMAP,
       original:TEST_ORIGINAL_CTMAP,
+      originalComp:TEST_ORIGINAL_COMPMAP,
       active:TEST_ACTIVE,
     }));
   }catch(e){console.warn('saveTestEnv error',e);}
@@ -1433,6 +1435,7 @@ function loadTestEnv(){
     TEST_CTMAP=obj.ctMap||null;
     TEST_COMPMAP=obj.compMap||null;
     TEST_ORIGINAL_CTMAP=obj.original||null;
+    TEST_ORIGINAL_COMPMAP=obj.originalComp||null;
     TEST_ACTIVE=!!obj.active;
     return TEST_ACTIVE;
   }catch(e){return false;}
@@ -1486,6 +1489,7 @@ function startTestEnv(){
   TEST_CTMAP=_deepCloneMap(ctMap);
   TEST_COMPMAP=_deepCloneMap(compMap);
   TEST_ORIGINAL_CTMAP=_deepCloneMap(ctMap);
+  TEST_ORIGINAL_COMPMAP=_deepCloneMap(compMap);
   TEST_ACTIVE=true;
   saveTestEnv();
   showTestSim();
@@ -1494,7 +1498,7 @@ function startTestEnv(){
 function resetTestEnv(){
   if(!confirm('Resetar a simulação? Todas as movimentações feitas serão descartadas.'))return;
   localStorage.removeItem(TEST_STORAGE_KEY);
-  TEST_SELECTED_CTS=[];TEST_CTMAP=null;TEST_COMPMAP=null;TEST_ORIGINAL_CTMAP=null;TEST_ACTIVE=false;
+  TEST_SELECTED_CTS=[];TEST_CTMAP=null;TEST_COMPMAP=null;TEST_ORIGINAL_CTMAP=null;TEST_ORIGINAL_COMPMAP=null;TEST_ACTIVE=false;
   showTestSelector();
 }
 
@@ -1672,18 +1676,23 @@ function openTestDetail(ct){
   const panel=document.getElementById('testDetPanel');if(!panel)return;
   panel.classList.remove('closed');
   const cap=testCapMin(ct);
-  const val=TEST_CTMAP[ct]||{load_min:0,setup_min:0};
+
+  // Respeita o modo de visualização atual (ANTES mostra estado original, DEPOIS mostra simulado)
+  const isAntes=TEST_VIEW_MODE==='antes';
+  const val=(isAntes?TEST_ORIGINAL_CTMAP[ct]:TEST_CTMAP[ct])||{load_min:0,setup_min:0};
   const load=ctLoad(val);
   const setup=ctSetup(val);
   const pct=cap>0?Math.round(load/cap*100):0;
   const col=semC(pct,false);
-  const items=(TEST_COMPMAP[ct]||[]).slice();
+  const items=((isAntes?TEST_ORIGINAL_COMPMAP[ct]:TEST_COMPMAP[ct])||[]).slice();
 
-  // Comparação com estado original
+  // Comparação com o outro estado (sempre mostra original vs simulado, independente do modo)
   const origVal=TEST_ORIGINAL_CTMAP[ct]||{load_min:0,setup_min:0};
+  const curValForCompare=TEST_CTMAP[ct]||{load_min:0,setup_min:0};
   const origLoad=ctLoad(origVal);
   const origPct=cap>0?Math.round(origLoad/cap*100):0;
-  const changed=origPct!==pct;
+  const curPct=cap>0?Math.round(ctLoad(curValForCompare)/cap*100):0;
+  const changed=origPct!==curPct;
 
   let sortCol='mins',sortAsc=false;
 
@@ -1705,11 +1714,16 @@ function openTestDetail(ct){
         <button class="det-close" id="testDetClose">✕</button>
       </div>
       <div class="det-meta">Carga: <b>${fmtH(load)}</b> &nbsp;|&nbsp; Cap: <b>${fmtH(cap)}</b> &nbsp;|&nbsp; Ocupação: <b style="color:${col}">${pct}%</b>
-        ${changed?` <span style="color:#f59e0b;font-size:10px">(antes: ${origPct}% · ${fmtH(origLoad)})</span>`:''}
+        ${changed?(isAntes
+          ?` <span style="color:#8b5cf6;font-size:10px">(depois: ${curPct}% · ${fmtH(ctLoad(curValForCompare))})</span>`
+          :` <span style="color:#f59e0b;font-size:10px">(antes: ${origPct}% · ${fmtH(origLoad)})</span>`
+        ):''}
         &nbsp;|&nbsp; ${items.length} componente(s)</div>
-      <div style="padding:6px 14px;background:rgba(37,99,168,.06);border-bottom:1px solid var(--border);font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);">
+      ${isAntes?`<div style="padding:6px 14px;background:rgba(139,92,246,.06);border-bottom:1px solid var(--border);font-family:'JetBrains Mono',monospace;font-size:9px;color:#8b5cf6;">
+        Visualizando estado ORIGINAL — alterne para "DEPOIS" para movimentar itens
+      </div>`:`<div style="padding:6px 14px;background:rgba(37,99,168,.06);border-bottom:1px solid var(--border);font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);">
         Selecione o CT de destino em uma ou mais linhas e clique em "Aplicar Movimentações"
-      </div>
+      </div>`}
       <div class="det-scroll">
         ${sorted.length?`<table class="det-ops" style="width:100%;table-layout:auto">
           <thead><tr>
@@ -1717,12 +1731,11 @@ function openTestDetail(ct){
             <th class="sort-th" data-c="desc" style="cursor:pointer">DESCRIÇÃO ${sortCol==='desc'?ar(sortAsc):''}</th>
             <th class="sort-th" data-c="qty" style="width:64px;cursor:pointer;text-align:right">QTD ${sortCol==='qty'?ar(sortAsc):''}</th>
             <th class="sort-th" data-c="mins" style="width:72px;cursor:pointer;text-align:right">TOTAL MIN ${sortCol==='mins'?ar(sortAsc):''}</th>
-            <th style="width:150px;text-align:center">MOVER PARA</th>
-            <th style="width:32px;text-align:center"></th>
+            ${isAntes?'':'<th style="width:150px;text-align:center">MOVER PARA</th><th style="width:32px;text-align:center"></th>'}
           </tr></thead>
           <tbody>${sorted.map((item,i)=>{
             const bw=Math.round(item.mins/maxM*100);
-            const fromOther=item._origCt&&item._origCt!==ct;
+            const fromOther=!isAntes&&item._origCt&&item._origCt!==ct;
             return`<tr ${fromOther?'style="background:rgba(34,197,94,.05)"':''}>
               <td style="font-family:JetBrains Mono,monospace;font-size:9px;color:var(--accent3)">${item.mat}
                 ${fromOther?`<div style="font-size:8px;color:#22c55e;margin-top:2px">↳ veio de ${item._origCt}</div>`:''}
@@ -1730,7 +1743,7 @@ function openTestDetail(ct){
               <td style="font-size:11px;word-break:break-word;line-height:1.3">${item.desc}</td>
               <td style="font-family:JetBrains Mono,monospace;font-size:10px;text-align:right;color:var(--text2)">${Math.round(item.qtyTotal)}</td>
               <td style="font-family:JetBrains Mono,monospace;font-size:10px;text-align:right;color:var(--accent3)">${item.mins.toFixed(1)}<div style="height:3px;background:var(--s4);border-radius:1px;margin-top:2px"><div style="height:100%;width:${bw}%;background:var(--accent2);border-radius:1px"></div></div></td>
-              <td style="text-align:center">
+              ${isAntes?'':`<td style="text-align:center">
                 <select class="test-move-sel" data-mat="${item.mat}" data-from="${ct}" style="width:100%;background:var(--bg);border:1px solid var(--border2);color:var(--text2);font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 4px;">
                   <option value="">— manter aqui —</option>
                   ${otherCTs.map(dst=>`<option value="${dst}">${dst}</option>`).join('')}
@@ -1741,7 +1754,7 @@ function openTestDetail(ct){
                   style="background:transparent;border:1px solid var(--border2);color:var(--text3);width:22px;height:22px;cursor:pointer;border-radius:2px;font-size:11px;line-height:1;transition:all .15s;"
                   onmouseenter="this.style.borderColor='#ef4444';this.style.color='#ef4444'"
                   onmouseleave="this.style.borderColor='var(--border2)';this.style.color='var(--text3)'">✕</button>
-              </td>
+              </td>`}
             </tr>`;
           }).join('')}
           ${(()=>{
@@ -1750,18 +1763,16 @@ function openTestDetail(ct){
             return`<tr style="border-top:1px solid var(--border2);background:rgba(139,92,246,.06)">
               <td colspan="2" style="font-family:JetBrains Mono,monospace;font-size:9px;color:#8b5cf6;padding:5px 8px">
                 ⚙ SETUP &nbsp;·&nbsp; ${sorted.length} itens × ${setupMin}min = ${fmtH(setup)}
-                ${changed?` <span style="color:var(--text3)">(antes: ${fmtH(ctSetup(origVal))})</span>`:''}
               </td>
               <td style="font-family:JetBrains Mono,monospace;font-size:9px;color:#8b5cf6;text-align:right">${sorted.length}</td>
               <td style="font-family:JetBrains Mono,monospace;font-size:9px;color:#8b5cf6;text-align:right;font-weight:700">${fmtH(setup)}</td>
-              <td></td>
-              <td></td>
+              ${isAntes?'':'<td></td><td></td>'}
             </tr>`;
           })()}
           </tbody>
         </table>`:'<div style="color:var(--text3);font-size:11px;padding:12px 0">Nenhum componente</div>'}
       </div>
-      ${items.length?`<div style="padding:10px 14px;border-top:1px solid var(--border);display:flex;gap:8px;">
+      ${(items.length&&!isAntes)?`<div style="padding:10px 14px;border-top:1px solid var(--border);display:flex;gap:8px;">
         <button class="calc-all" id="testApplyBtn" style="flex:1;">✓ Aplicar Movimentações</button>
       </div>`:''}
     `;
