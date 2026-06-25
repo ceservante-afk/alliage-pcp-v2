@@ -2288,16 +2288,31 @@ document.getElementById('xlsIn').addEventListener('change',function(e){
       if(qty<=0)return;
       const pa=ALL_PAS.find(p=>p.mat===mat);
       if(!pa){skipped.push(mat);return;}
-      // Parse date
+      // Parse date — suporta Date nativo, serial Excel, e strings em vários formatos
       let date=null;
       const dRaw=rawRows[i+1]?.[dateI];
       if(dRaw instanceof Date)date=dRaw;
       else if(typeof dRaw==='number'){
         const d=new Date((dRaw-25569)*86400*1000);
         date=new Date(d.getFullYear(),d.getMonth(),d.getDate());
-      } else if(typeof dRaw==='string'&&dRaw){
-        const p=dRaw.split(/[-\/]/);
-        if(p.length===3)date=new Date(p[0],p[1]-1,p[2]);
+      } else if(typeof dRaw==='string'&&dRaw.trim()){
+        const str=dRaw.trim();
+        const p=str.split(/[-\/.]/).map(s=>s.trim());
+        if(p.length===3){
+          // Detecta formato pela posição do componente de 4 dígitos (ano)
+          if(p[0].length===4){
+            // YYYY-MM-DD ou YYYY/MM/DD
+            date=new Date(+p[0], +p[1]-1, +p[2]);
+          } else if(p[2].length===4){
+            // DD.MM.YYYY ou DD/MM/YYYY (padrão BR)
+            date=new Date(+p[2], +p[1]-1, +p[0]);
+          } else {
+            // Ano com 2 dígitos — assume DD.MM.YY
+            const yy=+p[2]<70?2000+ +p[2]:1900+ +p[2];
+            date=new Date(yy, +p[1]-1, +p[0]);
+          }
+          if(isNaN(date.getTime()))date=null;
+        }
       }
       if(!date)date=new Date();
       newItems.push({mat,qty,date,pa});
