@@ -1643,6 +1643,7 @@ function openTestDetail(ct){
             <th class="sort-th" data-c="qty" style="width:64px;cursor:pointer;text-align:right">QTD ${sortCol==='qty'?ar(sortAsc):''}</th>
             <th class="sort-th" data-c="mins" style="width:72px;cursor:pointer;text-align:right">TOTAL MIN ${sortCol==='mins'?ar(sortAsc):''}</th>
             <th style="width:150px;text-align:center">MOVER PARA</th>
+            <th style="width:32px;text-align:center"></th>
           </tr></thead>
           <tbody>${sorted.map((item,i)=>{
             const bw=Math.round(item.mins/maxM*100);
@@ -1660,6 +1661,12 @@ function openTestDetail(ct){
                   ${otherCTs.map(dst=>`<option value="${dst}">${dst}</option>`).join('')}
                 </select>
               </td>
+              <td style="text-align:center">
+                <button class="test-del-item" data-mat="${item.mat}" data-ct="${ct}" title="Excluir item da simulação"
+                  style="background:transparent;border:1px solid var(--border2);color:var(--text3);width:22px;height:22px;cursor:pointer;border-radius:2px;font-size:11px;line-height:1;transition:all .15s;"
+                  onmouseenter="this.style.borderColor='#ef4444';this.style.color='#ef4444'"
+                  onmouseleave="this.style.borderColor='var(--border2)';this.style.color='var(--text3)'">✕</button>
+              </td>
             </tr>`;
           }).join('')}
           ${(()=>{
@@ -1672,6 +1679,7 @@ function openTestDetail(ct){
               </td>
               <td style="font-family:JetBrains Mono,monospace;font-size:9px;color:#f59e0b;text-align:right">${sorted.length}</td>
               <td style="font-family:JetBrains Mono,monospace;font-size:9px;color:#f59e0b;text-align:right;font-weight:700">${fmtH(setup)}</td>
+              <td></td>
               <td></td>
             </tr>`;
           })()}
@@ -1687,6 +1695,12 @@ function openTestDetail(ct){
       const c=th.dataset.c;if(sortCol===c)sortAsc=!sortAsc;else{sortCol=c;sortAsc=(c==='mat'||c==='desc');}buildTable();
     }));
     document.getElementById('testApplyBtn')?.addEventListener('click',()=>applyTestMoves(ct));
+    panel.querySelectorAll('.test-del-item').forEach(btn=>btn.addEventListener('click',()=>{
+      const mat=btn.dataset.mat,delCt=btn.dataset.ct;
+      const matDesc=items.find(it=>it.mat===mat)?.desc||mat;
+      if(!confirm(`Excluir "${mat} — ${matDesc}" da simulação?\n\nIsso remove o item apenas do Ambiente de Testes, sem afetar a programação real.`))return;
+      deleteTestItem(delCt,mat);
+    }));
   }
   buildTable();
 }
@@ -1739,6 +1753,29 @@ function applyTestMoves(fromCt){
     if(!TEST_SELECTED_CTS.includes(ct))TEST_SELECTED_CTS.push(ct);
   }
 
+  saveTestEnv();
+  document.getElementById('testDetPanel')?.classList.add('closed');
+  renderTestSim();
+}
+
+// Recalcula load_min/setup_min de um CT a partir do compMap atual da simulação
+function _recalcTestCT(ct){
+  const items=TEST_COMPMAP[ct]||[];
+  const processMin=items.reduce((s,it)=>s+it.mins,0);
+  const setupPerItem=CT_SETUP_MIN[ct]||0;
+  const setupMin=setupPerItem*items.length;
+  if(!TEST_CTMAP[ct])TEST_CTMAP[ct]={load_min:0,setup_min:0};
+  TEST_CTMAP[ct].load_min=processMin+setupMin;
+  TEST_CTMAP[ct].setup_min=setupMin;
+}
+
+// Exclui um item da simulação (não afeta a programação real — só o Ambiente de Testes)
+function deleteTestItem(ct,mat){
+  const items=TEST_COMPMAP[ct]||[];
+  const idx=items.findIndex(i=>i.mat===mat);
+  if(idx===-1)return;
+  items.splice(idx,1);
+  _recalcTestCT(ct);
   saveTestEnv();
   document.getElementById('testDetPanel')?.classList.add('closed');
   renderTestSim();
