@@ -444,6 +444,7 @@ table.ctt th{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--te
     <div class="consol-topbar">
       <div class="consol-title">Ambiente de Testes</div>
       <div class="consol-sub" id="testSub">Simule movimentações de carga entre CTs sem afetar a programação real</div>
+      <div id="testViewToggle" style="display:flex;margin-left:auto;margin-right:8px;"></div>
       <button class="recalc" id="testResetBtn" onclick="resetTestEnv()" style="display:none">↺ Resetar Simulação</button>
       <button class="recalc" id="testNewSelBtn" onclick="showTestSelector()" style="display:none">⚙ Trocar Seleção</button>
     </div>
@@ -1510,18 +1511,27 @@ function testCapMin(ct){
   return capMin(ct);
 }
 
+let TEST_VIEW_MODE='depois'; // 'depois' | 'antes' — toggle de visualização
+
 function renderTestSim(){
   const body=document.getElementById('testCTBody');
   if(!body)return;
-  const entries=TEST_SELECTED_CTS.map(ct=>[ct,TEST_CTMAP[ct]||{load_min:0,setup_min:0}]);
-  const maxLoad=Math.max(...entries.map(([,v])=>ctLoad(v)),1);
+
+  // Remove painel de detalhe antigo antes de recriar (evita acúmulo/visual borrado)
+  document.getElementById('testDetPanel')?.remove();
+
+  let entries=TEST_SELECTED_CTS.map(ct=>[ct,TEST_CTMAP[ct]||{load_min:0,setup_min:0}]);
+  // Ordena sempre do menor para o maior em carga (minutos)
+  entries.sort((a,b)=>ctLoad(a[1])-ctLoad(b[1]));
 
   const tbl=document.createElement('table');tbl.className='ctt';
-  tbl.innerHTML=`<colgroup><col style="width:220px"><col style="width:90px"><col style="width:80px"><col style="width:60px"><col style="width:68px"><col style="width:52px"><col style="width:62px"><col style="width:72px"><col style="width:100px"><col style="width:72px"><col style="width:84px"></colgroup><thead><tr><th>CT</th><th>Carga</th><th>Cap.</th><th style="text-align:center">Turnos</th><th style="text-align:center">H/Turno</th><th style="text-align:center">Dias</th><th style="text-align:center">Efic %</th><th>%</th><th>Ocupação</th><th>Status</th><th style="text-align:right">Ações</th></tr></thead>`;
+  tbl.innerHTML=`<colgroup><col style="width:200px"><col style="width:85px"><col style="width:75px"><col style="width:56px"><col style="width:62px"><col style="width:48px"><col style="width:58px"><col style="width:64px"><col style="width:90px"><col style="width:68px"><col style="width:76px"></colgroup><thead><tr><th>CT</th><th>Carga</th><th>Cap.</th><th style="text-align:center">Turnos</th><th style="text-align:center">H/Turno</th><th style="text-align:center">Dias</th><th style="text-align:center">Efic %</th><th>%</th><th>Ocupação</th><th>Status</th><th style="text-align:right">Ações</th></tr></thead>`;
   const tbody=document.createElement('tbody');
 
   entries.forEach(([ct,val])=>{
-    const load=ctLoad(val),setup=ctSetup(val),proc=load-setup;
+    const origVal=TEST_ORIGINAL_CTMAP[ct]||{load_min:0,setup_min:0};
+    const showVal=TEST_VIEW_MODE==='antes'?origVal:val;
+    const load=ctLoad(showVal),setup=ctSetup(showVal),proc=load-setup;
     const s=defS(ct);const cap=testCapMin(ct);
     const pct=cap>0?Math.round(load/cap*100):0;
     const col=semC(pct,false);const bw=Math.min(pct,100);
@@ -1533,32 +1543,32 @@ function renderTestSim(){
     const procW=cap>0?Math.min(proc/cap*100,100):0;
     const setupW=cap>0?Math.min(setup/cap*100,Math.max(0,100-procW)):0;
     const barHtml=hasSetup
-      ?`<div class="ct-bar-bg"><div style="display:flex;height:100%;border-radius:4px;overflow:hidden"><div style="width:${procW}%;background:${col};transition:width .3s"></div><div style="width:${setupW}%;background:#f59e0b;transition:width .3s" title="Setup: ${fmtH(setup)}"></div></div></div>`
+      ?`<div class="ct-bar-bg"><div style="display:flex;height:100%;border-radius:4px;overflow:hidden"><div style="width:${procW}%;background:${col};transition:width .3s"></div><div style="width:${setupW}%;background:#8b5cf6;transition:width .3s" title="Setup: ${fmtH(setup)}"></div></div></div>`
       :`<div class="ct-bar-bg"><div class="ct-bar-fill" style="width:${bw}%;background:${col}"></div></div>`;
 
-    // Comparação com original
-    const origVal=TEST_ORIGINAL_CTMAP[ct];
-    const origLoad=origVal?ctLoad(origVal):0;
+    const origLoad=ctLoad(origVal);
     const origPct=cap>0?Math.round(origLoad/cap*100):0;
-    const changed=origPct!==pct;
+    const curPct=cap>0?Math.round(ctLoad(val)/cap*100):0;
+    const changed=origPct!==curPct;
 
     const incomingCount=(TEST_COMPMAP[ct]||[]).filter(it=>it._origCt).length;
     const tr=document.createElement('tr');tr.className=rowClass;
     tr.innerHTML=`
       <td><div class="ct-name" style="color:${rowColor};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${ct}${changed?' <span style="color:#f59e0b;font-size:9px">●</span>':''}</div>
           <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</div>
-          ${incomingCount?`<div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:#22c55e;margin-top:2px">↳ ${incomingCount} item(s) recebido(s)</div>`:''}</td>
+          ${incomingCount&&TEST_VIEW_MODE==='depois'?`<div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:#22c55e;margin-top:2px">↳ ${incomingCount} recebido(s)</div>`:''}</td>
       <td class="ct-load-val">${fmtH(load)}</td>
       <td class="ct-cap-val">${fmtH(cap)}</td>
-      <td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center">${s.turnos}</td>
-      <td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center">${s.hturno}</td>
-      <td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center">${s.dias}</td>
-      <td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center">${s.efic}</td>
-      <td class="ct-pct" style="color:${col}">${pct}%${changed?` <span style="font-size:9px;color:#f59e0b">(era ${origPct}%)</span>`:''}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center" data-field="turnos">${s.turnos}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center" data-field="hturno">${s.hturno}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center" data-field="dias">${s.dias}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);text-align:center" data-field="efic">${s.efic}</td>
+      <td class="ct-pct" style="color:${col}">${pct}%</td>
       <td>${barHtml}</td>
       <td class="ct-status" style="color:${col}">${semTxt(pct,false)}</td>
       <td style="white-space:nowrap;text-align:right">
-        <span class="test-det-open" style="cursor:pointer;color:var(--text3);font-size:11px;margin-right:4px" data-ct="${ct}">▶</span>
+        <span class="test-det-open" style="cursor:pointer;color:var(--text3);font-size:11px;margin-right:6px" data-ct="${ct}">▶</span>
+        <button class="ct-edit-btn" data-ct="${ct}" onclick="inlineEditTestCT('${ct}',this)" title="Editar parâmetros"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
       </td>`;
     tr.querySelector('.test-det-open').addEventListener('click',e=>{e.stopPropagation();openTestDetail(ct);});
     tbody.appendChild(tr);
@@ -1569,7 +1579,63 @@ function renderTestSim(){
   const det=document.createElement('div');det.className='detail-panel closed';det.id='testDetPanel';document.body.appendChild(det);
 
   renderTestChangesPanel();
+  updateTestViewToggle();
 }
+
+function setTestViewMode(mode){
+  TEST_VIEW_MODE=mode;
+  renderTestSim();
+}
+
+function updateTestViewToggle(){
+  const wrap=document.getElementById('testViewToggle');
+  if(!wrap)return;
+  wrap.innerHTML=`
+    <button onclick="setTestViewMode('antes')" style="padding:5px 14px;border:1px solid var(--border2);background:${TEST_VIEW_MODE==='antes'?'var(--accent2)':'transparent'};color:${TEST_VIEW_MODE==='antes'?'#fff':'var(--text3)'};font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;cursor:pointer;border-radius:3px 0 0 3px;">ANTES</button>
+    <button onclick="setTestViewMode('depois')" style="padding:5px 14px;border:1px solid var(--border2);border-left:none;background:${TEST_VIEW_MODE==='depois'?'var(--accent2)':'transparent'};color:${TEST_VIEW_MODE==='depois'?'#fff':'var(--text3)'};font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;cursor:pointer;border-radius:0 3px 3px 0;">DEPOIS</button>`;
+}
+
+function inlineEditTestCT(ct,btn){
+  if(!isAdmin())return;
+  const row=btn.closest('tr');
+  const isEditing=row.classList.contains('ct-editing');
+
+  if(isEditing){
+    const s=defS(ct);
+    row.querySelectorAll('td[data-field]').forEach(td=>{
+      const f=td.dataset.field;
+      const inp=td.querySelector('input');
+      if(inp&&!inp.readOnly){
+        const val=parseFloat(inp.value)||s[f];
+        if(!ctSets[ct])ctSets[ct]={};
+        ctSets[ct][f]=val;
+      }
+    });
+    saveCtSets();
+    renderTestSim(); // re-render completo já reflete o novo capMin
+  } else {
+    const s=defS(ct);
+    const fields={turnos:{min:1,max:3,step:1},hturno:{min:1,max:24,step:0.1},dias:{min:1,max:31,step:1,readonly:true},efic:{min:1,max:100,step:1}};
+    row.querySelectorAll('td[data-field]').forEach(td=>{
+      const f=td.dataset.field;
+      const cfg=fields[f];
+      if(cfg.readonly){
+        td.innerHTML=`<input type="number" value="${s[f]}" readonly
+          style="width:48px;background:var(--bg);border:1px solid var(--border2);padding:3px 4px;
+                 font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);
+                 outline:none;text-align:center;opacity:.5;cursor:not-allowed;">`;
+      } else {
+        td.innerHTML=`<input type="number" min="${cfg.min}" max="${cfg.max}" step="${cfg.step||1}" value="${s[f]}"
+          style="width:48px;background:var(--s1);border:1px solid var(--accent2);padding:3px 4px;
+                 font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent3);
+                 outline:none;text-align:center;">`;
+      }
+    });
+    row.classList.add('ct-editing');
+    btn.textContent='✔';btn.style.color='var(--green)';
+  }
+}
+
 
 function renderTestChangesPanel(){
   const panel=document.getElementById('testChangesPanel');
@@ -1583,13 +1649,20 @@ function renderTestChangesPanel(){
     const origPct=cap>0?Math.round(ctLoad(orig)/cap*100):0;
     if(curPct!==origPct)changes.push({ct,origPct,curPct});
   }
-  if(!changes.length){panel.style.display='none';return;}
+  if(!changes.length||TEST_VIEW_MODE==='antes'){panel.style.display='none';return;}
   panel.style.display='';
-  panel.innerHTML=`<div style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;color:#f59e0b;margin-bottom:4px;">⚙ RESUMO DAS MOVIMENTAÇÕES</div>
-    <div style="display:flex;gap:14px;flex-wrap:wrap;">
-      ${changes.map(c=>`<span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text2);">
-        <b style="color:var(--accent3)">${c.ct}</b>: ${c.origPct}% → <b style="color:${c.curPct>c.origPct?'#ef4444':'#22c55e'}">${c.curPct}%</b>
-      </span>`).join('')}
+  panel.innerHTML=`<div style="font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;color:var(--text3);letter-spacing:.08em;margin-bottom:6px;">${changes.length} CT(S) ALTERADO(S)</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      ${changes.map(c=>{
+        const up=c.curPct>c.origPct;
+        return`<div style="display:flex;align-items:center;gap:6px;padding:4px 10px;background:var(--s2);border:1px solid var(--border);border-radius:3px;">
+          <b style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent3)">${c.ct}</b>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3)">${c.origPct}%</span>
+          <span style="color:var(--text3);font-size:9px">→</span>
+          <b style="font-family:'JetBrains Mono',monospace;font-size:10px;color:${up?'#ef4444':'#22c55e'}">${c.curPct}%</b>
+          <span style="font-size:9px">${up?'▲':'▼'}</span>
+        </div>`;
+      }).join('')}
     </div>`;
 }
 
@@ -1672,13 +1745,13 @@ function openTestDetail(ct){
           ${(()=>{
             const setupMin=CT_SETUP_MIN[ct];
             if(!setupMin||!sorted.length)return'';
-            return`<tr style="border-top:1px solid var(--border2);background:rgba(245,158,11,.06)">
-              <td colspan="2" style="font-family:JetBrains Mono,monospace;font-size:9px;color:#f59e0b;padding:5px 8px">
+            return`<tr style="border-top:1px solid var(--border2);background:rgba(139,92,246,.06)">
+              <td colspan="2" style="font-family:JetBrains Mono,monospace;font-size:9px;color:#8b5cf6;padding:5px 8px">
                 ⚙ SETUP &nbsp;·&nbsp; ${sorted.length} itens × ${setupMin}min = ${fmtH(setup)}
                 ${changed?` <span style="color:var(--text3)">(antes: ${fmtH(ctSetup(origVal))})</span>`:''}
               </td>
-              <td style="font-family:JetBrains Mono,monospace;font-size:9px;color:#f59e0b;text-align:right">${sorted.length}</td>
-              <td style="font-family:JetBrains Mono,monospace;font-size:9px;color:#f59e0b;text-align:right;font-weight:700">${fmtH(setup)}</td>
+              <td style="font-family:JetBrains Mono,monospace;font-size:9px;color:#8b5cf6;text-align:right">${sorted.length}</td>
+              <td style="font-family:JetBrains Mono,monospace;font-size:9px;color:#8b5cf6;text-align:right;font-weight:700">${fmtH(setup)}</td>
               <td></td>
               <td></td>
             </tr>`;
@@ -1834,7 +1907,7 @@ function buildCTRows(entries,tbody,maxLoad,ctColor,sectorClass){
     const procW=cap>0?Math.min(proc/cap*100,100):0;
     const setupW=cap>0?Math.min(setup/cap*100,Math.max(0,100-procW)):0;
     const barHtml=hasSetup
-      ?`<div class="ct-bar-bg"><div style="display:flex;height:100%;border-radius:4px;overflow:hidden"><div style="width:${procW}%;background:${col};transition:width .3s"></div><div style="width:${setupW}%;background:#f59e0b;transition:width .3s" title="Setup: ${fmtH(setup)}"></div></div></div>`
+      ?`<div class="ct-bar-bg"><div style="display:flex;height:100%;border-radius:4px;overflow:hidden"><div style="width:${procW}%;background:${col};transition:width .3s"></div><div style="width:${setupW}%;background:#8b5cf6;transition:width .3s" title="Setup: ${fmtH(setup)}"></div></div></div>`
       :`<div class="ct-bar-bg"><div class="ct-bar-fill" style="width:${bw}%;background:${col}"></div></div>`;
     const tr=document.createElement('tr');tr.className=rowClass;
     tr.innerHTML=`
@@ -2029,7 +2102,7 @@ function renderFabSectorDetail(sectorKey,filterStatus='ALL',searchTerm=''){
     const procW=cap>0?Math.min(proc/cap*100,100):0;
     const setupW=cap>0?Math.min(setup/cap*100,Math.max(0,100-procW)):0;
     const barHtml=hasSetup
-      ?`<div class="ct-bar-bg" style="width:100%"><div style="display:flex;height:100%;border-radius:4px;overflow:hidden"><div style="width:${procW}%;background:${col}"></div><div style="width:${setupW}%;background:#f59e0b" title="Setup: ${fmtH(setup)}"></div></div></div>`
+      ?`<div class="ct-bar-bg" style="width:100%"><div style="display:flex;height:100%;border-radius:4px;overflow:hidden"><div style="width:${procW}%;background:${col}"></div><div style="width:${setupW}%;background:#8b5cf6" title="Setup: ${fmtH(setup)}"></div></div></div>`
       :`<div class="ct-bar-bg" style="width:100%"><div class="ct-bar-fill" style="width:${bw}%;background:${col};border-radius:4px"></div></div>`;
     const tr=document.createElement('tr');tr.className='ct-main-tr';tr.style.borderBottom='1px solid var(--border2)';
     tr.innerHTML=`
@@ -2105,14 +2178,14 @@ function openDetail(ct,load,cap,pct,sectorClass){
             const setupMin=CT_SETUP_MIN[ct];
             if(!setupMin||!sorted.length)return'';
             const totalSetup=sorted.length*setupMin;
-            return`<tr style="border-top:1px solid var(--border2);background:rgba(245,158,11,.06)">
-              <td colspan="2" style="font-family:JetBrains Mono,monospace;font-size:9px;color:#f59e0b;padding:5px 8px">
+            return`<tr style="border-top:1px solid var(--border2);background:rgba(139,92,246,.06)">
+              <td colspan="2" style="font-family:JetBrains Mono,monospace;font-size:9px;color:#8b5cf6;padding:5px 8px">
                 ⚙ SETUP &nbsp;·&nbsp; ${sorted.length} itens × ${setupMin}min = ${fmtH(totalSetup)}
               </td>
-              <td style="font-family:JetBrains Mono,monospace;font-size:9px;color:#f59e0b;text-align:right">${sorted.length}</td>
-              <td style="font-family:JetBrains Mono,monospace;font-size:9px;color:#f59e0b;text-align:right">${setupMin}</td>
-              <td style="font-family:JetBrains Mono,monospace;font-size:9px;color:#f59e0b;text-align:right">${totalSetup.toFixed(0)}</td>
-              <td style="font-family:JetBrains Mono,monospace;font-size:9px;color:#f59e0b;text-align:right;font-weight:700">${fmtH(totalSetup)}</td>
+              <td style="font-family:JetBrains Mono,monospace;font-size:9px;color:#8b5cf6;text-align:right">${sorted.length}</td>
+              <td style="font-family:JetBrains Mono,monospace;font-size:9px;color:#8b5cf6;text-align:right">${setupMin}</td>
+              <td style="font-family:JetBrains Mono,monospace;font-size:9px;color:#8b5cf6;text-align:right">${totalSetup.toFixed(0)}</td>
+              <td style="font-family:JetBrains Mono,monospace;font-size:9px;color:#8b5cf6;text-align:right;font-weight:700">${fmtH(totalSetup)}</td>
             </tr>`;
           })()}
           </tbody>
