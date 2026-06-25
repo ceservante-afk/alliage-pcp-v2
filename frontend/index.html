@@ -1540,9 +1540,10 @@ function renderTestSim(){
     const rowColor=ctSec?ctSec.color:'var(--accent2)';
     const rowClass=pct>=100?'ct-main-tr ct-row-critical':pct>=80?'ct-main-tr ct-row-warning':'ct-main-tr';
     const hasSetup=setup>0;
+    const overCapacity=pct>100;
     const procW=cap>0?Math.min(proc/cap*100,100):0;
-    const setupW=cap>0?Math.min(setup/cap*100,Math.max(0,100-procW)):0;
-    const barHtml=hasSetup
+    const setupW=(cap>0&&!overCapacity)?Math.min(setup/cap*100,Math.max(0,100-procW)):0;
+    const barHtml=(hasSetup&&!overCapacity)
       ?`<div class="ct-bar-bg"><div style="display:flex;height:100%;border-radius:4px;overflow:hidden"><div style="width:${procW}%;background:${col};transition:width .3s"></div><div style="width:${setupW}%;background:#8b5cf6;transition:width .3s" title="Setup: ${fmtH(setup)}"></div></div></div>`
       :`<div class="ct-bar-bg"><div class="ct-bar-fill" style="width:${bw}%;background:${col}"></div></div>`;
 
@@ -1649,6 +1650,7 @@ function renderTestChangesPanel(){
     const origPct=cap>0?Math.round(ctLoad(orig)/cap*100):0;
     if(curPct!==origPct)changes.push({ct,origPct,curPct});
   }
+  changes.sort((a,b)=>a.curPct-b.curPct);
   if(!changes.length||TEST_VIEW_MODE==='antes'){panel.style.display='none';return;}
   panel.style.display='';
   panel.innerHTML=`<div style="font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;color:var(--text3);letter-spacing:.08em;margin-bottom:6px;">${changes.length} CT(S) ALTERADO(S)</div>
@@ -1904,9 +1906,10 @@ function buildCTRows(entries,tbody,maxLoad,ctColor,sectorClass){
     const excessStr=excess>0?`+${Math.floor(excess/60)}h${Math.round(excess%60)>0?Math.round(excess%60)+'m':''}`:'';
     const isCustom=ctSets[ct]&&Object.keys(ctSets[ct]).some(k=>k!=='_editing');
     const hasSetup=setup>0;
+    const overCapacity=pct>100;
     const procW=cap>0?Math.min(proc/cap*100,100):0;
-    const setupW=cap>0?Math.min(setup/cap*100,Math.max(0,100-procW)):0;
-    const barHtml=hasSetup
+    const setupW=(cap>0&&!overCapacity)?Math.min(setup/cap*100,Math.max(0,100-procW)):0;
+    const barHtml=(hasSetup&&!overCapacity)
       ?`<div class="ct-bar-bg"><div style="display:flex;height:100%;border-radius:4px;overflow:hidden"><div style="width:${procW}%;background:${col};transition:width .3s"></div><div style="width:${setupW}%;background:#8b5cf6;transition:width .3s" title="Setup: ${fmtH(setup)}"></div></div></div>`
       :`<div class="ct-bar-bg"><div class="ct-bar-fill" style="width:${bw}%;background:${col}"></div></div>`;
     const tr=document.createElement('tr');tr.className=rowClass;
@@ -2099,9 +2102,10 @@ function renderFabSectorDetail(sectorKey,filterStatus='ALL',searchTerm=''){
     const col=semC(pct,inactive),bw=Math.min(pct,100),name=CT_NAMES[ct]||'';
     const isCustom=ctSets[ct]&&Object.keys(ctSets[ct]).some(k=>k!=='hc');
     const hasSetup=setup>0;
+    const overCapacity=pct>100;
     const procW=cap>0?Math.min(proc/cap*100,100):0;
-    const setupW=cap>0?Math.min(setup/cap*100,Math.max(0,100-procW)):0;
-    const barHtml=hasSetup
+    const setupW=(cap>0&&!overCapacity)?Math.min(setup/cap*100,Math.max(0,100-procW)):0;
+    const barHtml=(hasSetup&&!overCapacity)
       ?`<div class="ct-bar-bg" style="width:100%"><div style="display:flex;height:100%;border-radius:4px;overflow:hidden"><div style="width:${procW}%;background:${col}"></div><div style="width:${setupW}%;background:#8b5cf6" title="Setup: ${fmtH(setup)}"></div></div></div>`
       :`<div class="ct-bar-bg" style="width:100%"><div class="ct-bar-fill" style="width:${bw}%;background:${col};border-radius:4px"></div></div>`;
     const tr=document.createElement('tr');tr.className='ct-main-tr';tr.style.borderBottom='1px solid var(--border2)';
