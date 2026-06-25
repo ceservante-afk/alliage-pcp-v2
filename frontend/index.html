@@ -1695,7 +1695,8 @@ function inlineEditTestCT(ct,btn){
       const f=td.dataset.field;
       const inp=td.querySelector('input');
       if(inp&&!inp.readOnly){
-        const val=parseFloat(inp.value)||s[f];
+        const parsed=parseFloat(inp.value);
+        const val=isNaN(parsed)?s[f]:parsed; // aceita 0 explicitamente — só cai no fallback se for inválido
         TEST_PARAMS[mode][ct][f]=val;
       }
     });
@@ -1733,7 +1734,7 @@ function renderTestChangesPanel(){
 
   const mode=TEST_VIEW_MODE;
   const changes=[];
-  let totalCap=0,totalLoad=0;
+  let totalCap=0,totalLoad=0,totalSetup=0;
   for(const ct of TEST_SELECTED_CTS){
     const cur=TEST_CTMAP[ct]||{load_min:0,setup_min:0};
     const orig=TEST_ORIGINAL_CTMAP[ct]||{load_min:0,setup_min:0};
@@ -1745,7 +1746,9 @@ function renderTestChangesPanel(){
     const showVal=mode==='antes'?orig:cur;
     totalCap+=cap;
     totalLoad+=ctLoad(showVal);
+    totalSetup+=ctSetup(showVal);
   }
+  const totalPeca=totalLoad-totalSetup;
   changes.sort((a,b)=>a.curPct-b.curPct);
 
   // Card de capacidade geral — sempre visível enquanto há CTs selecionados
@@ -1753,18 +1756,28 @@ function renderTestChangesPanel(){
     bar.style.display='flex';
     const totalPct=totalCap>0?Math.round(totalLoad/totalCap*100):0;
     const col=totalPct>=100?'#ef4444':totalPct>=80?'#f59e0b':'#22c55e';
-    capBox.innerHTML=`<div style="display:flex;align-items:center;gap:18px;padding:8px 18px;background:var(--s2);border:1px solid var(--border);border-radius:4px;">
+    capBox.innerHTML=`<div style="display:flex;align-items:center;gap:16px;padding:8px 18px;background:var(--s2);border:1px solid var(--border);border-radius:4px;">
       <div style="text-align:right;">
         <div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;">Capacidade Geral</div>
         <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-top:2px;">${TEST_SELECTED_CTS.length} CT(s) · ${mode==='antes'?'antes':'depois'}</div>
       </div>
-      <div style="border-left:1px solid var(--border);padding-left:18px;text-align:right;">
-        <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);">Cap.</div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:var(--text2);">${fmtH(totalCap)}</div>
+      <div style="border-left:1px solid var(--border);padding-left:16px;text-align:right;">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text2);">Peça</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:var(--text2);">${fmtH(totalPeca)}</div>
       </div>
+      <div style="text-align:center;color:var(--text3);font-size:13px;">+</div>
+      <div style="text-align:right;">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#8b5cf6;">Setup</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:#8b5cf6;">${fmtH(totalSetup)}</div>
+      </div>
+      <div style="text-align:center;color:var(--text3);font-size:13px;">=</div>
       <div style="text-align:right;">
         <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);">Consumido</div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:var(--text);">${fmtH(totalLoad)}</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:800;color:var(--text);">${fmtH(totalLoad)}</div>
+      </div>
+      <div style="border-left:1px solid var(--border);padding-left:16px;text-align:right;">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);">Cap.</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:var(--text2);">${fmtH(totalCap)}</div>
       </div>
       <div style="text-align:right;">
         <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);">Ocupação</div>
@@ -2151,7 +2164,8 @@ function inlineEditCT(ct,btn){
       const f=td.dataset.field;
       const inp=td.querySelector('input');
       if(inp){
-        const val=parseFloat(inp.value)||s[f];
+        const parsed=parseFloat(inp.value);
+        const val=isNaN(parsed)?s[f]:parsed; // aceita 0 explicitamente
         if(!ctSets[ct])ctSets[ct]={};
         ctSets[ct][f]=val;
         // Restore to text display
