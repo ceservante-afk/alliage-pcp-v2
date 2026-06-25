@@ -1444,10 +1444,13 @@ function loadTestEnv(){
 function initTestTab(){
   if(loadTestEnv()&&TEST_ACTIVE){
     // Migração defensiva: sessões salvas antes desta versão não têm TEST_ORIGINAL_COMPMAP.
-    // Sem o snapshot original real, usamos o estado atual como base (não é o original
-    // histórico, mas evita o crash e permite o modo ANTES funcionar a partir de agora).
+    // Reconstrói o snapshot original a partir da programação REAL atual (getGlobalMaps),
+    // não do estado já mutado da simulação — senão itens já movidos/excluídos ficam perdidos.
     if(!TEST_ORIGINAL_COMPMAP){
-      TEST_ORIGINAL_COMPMAP=_deepCloneMap(TEST_COMPMAP||{});
+      const{ctMap:realCtMap,compMap:realCompMap}=getGlobalMaps();
+      TEST_ORIGINAL_COMPMAP=_deepCloneMap(realCompMap);
+      // TEST_ORIGINAL_CTMAP também é reconstruído da mesma fonte, para consistência
+      TEST_ORIGINAL_CTMAP=_deepCloneMap(realCtMap);
       saveTestEnv();
     }
     showTestSim();
