@@ -1652,10 +1652,10 @@ function updateEaglePreview(){
   if(!preview)return;
   if(!qty||!checked.length){preview.textContent='Selecione ao menos 1 CT e informe a quantidade.';return;}
   const totalMin=(qty*EAGLE_DU_SECS_PER_CONJUNTO)/60;
-  const totalSetups=qty*EAGLE_DU_ITENS_POR_CONJUNTO;
   const perCT=totalMin/checked.length;
-  const setupsPerCT=Math.round(totalSetups/checked.length);
-  preview.innerHTML=`Total: <b style="color:#8b5cf6">${totalMin.toFixed(1)} min</b> · ${totalSetups} setups &nbsp;→&nbsp; Por CT: <b style="color:var(--accent3)">${perCT.toFixed(1)} min</b> · ${setupsPerCT} setups`;
+  const setupsPerCT=EAGLE_DU_ITENS_POR_CONJUNTO; // 18 setups fixos por CT
+  const setupMinPerCT=setupsPerCT*30;
+  preview.innerHTML=`Processo: <b style="color:#8b5cf6">${totalMin.toFixed(1)} min</b> total &rarr; <b style="color:var(--accent3)">${perCT.toFixed(1)} min/CT</b> &nbsp;|&nbsp; Setup: <b style="color:#8b5cf6">${setupsPerCT}&times;30min = ${(setupMinPerCT/60).toFixed(1)}h/CT</b>`;
 }
 
 function addEagleDU(){
@@ -1665,14 +1665,10 @@ function addEagleDU(){
   if(!selectedCTs.length){alert('Selecione ao menos 1 CT.');return;}
 
   const totalMin=(qty*EAGLE_DU_SECS_POR_CONJUNTO)/60;
-  const totalSetups=qty*EAGLE_DU_ITENS_POR_CONJUNTO;
   const n=selectedCTs.length;
 
   selectedCTs.forEach(ct=>{
     const procMins=totalMin/n;
-    const setupDef=getSetupDefault(ct);
-    const setupsThisCT=Math.round(totalSetups/n);
-
     if(!TEST_COMPMAP[ct])TEST_COMPMAP[ct]=[];
     const existing=TEST_COMPMAP[ct].find(it=>it.mat==='EAGLE_DU');
     if(existing){
@@ -1685,8 +1681,8 @@ function addEagleDU(){
         qtyTotal:qty/n,
         indirUnit:EAGLE_DU_SECS_POR_CONJUNTO/60,
         mins:procMins,
-        _setupQty:Math.round(setupsThisCT/Math.max(qty/n,1)),
-        _setupMin:setupDef.min,
+        _setupQty:EAGLE_DU_ITENS_POR_CONJUNTO, // 18 setups fixos por CT
+        _setupMin:30,                          // 30min por setup
         _origCt:null,
       });
     }
