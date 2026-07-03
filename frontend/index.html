@@ -448,6 +448,7 @@ table.ctt th{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--te
       <div class="consol-sub" id="testSub">Simule movimentações de carga entre CTs sem afetar a programação real</div>
       <div id="testViewToggle" style="display:flex;margin-left:auto;margin-right:8px;"></div>
       <button class="recalc" id="testResetBtn" onclick="resetTestEnv()" style="display:none">↺ Resetar Simulação</button>
+      <button class="recalc" id="testEagleBtn" onclick="promptEagleDU()" style="display:none;background:rgba(139,92,246,.15);border-color:#8b5cf6;color:#8b5cf6;">+ EAGLE DU</button>
       <button class="recalc" id="testNewSelBtn" onclick="showTestSelector()" style="display:none">⚙ Trocar Seleção</button>
     </div>
     <div id="testSelectorWrap" style="flex:1;overflow-y:auto;padding:16px;">
@@ -825,6 +826,11 @@ async function adminDelete(id,username){
 
 // ── SLICER / PERIOD STATE ─────────────────────────────────────────────
 let PROG_DATA=[];
+// PAs desativados temporariamente — removidos do cálculo até importação de novo XLS.
+// Persiste em localStorage; reseta automaticamente ao importar nova programação.
+let DISABLED_PAS=new Set();
+function saveDisabledPAs(){try{localStorage.setItem('pcp_disabled_pas',JSON.stringify([...DISABLED_PAS]));}catch(e){}}
+function loadDisabledPAs(){try{const s=localStorage.getItem('pcp_disabled_pas');if(s)DISABLED_PAS=new Set(JSON.parse(s));}catch(e){}}
 let PROG_DATE_MIN=null, PROG_DATE_MAX=null;
 let SLICER_START=null, SLICER_END=null;
 
@@ -915,6 +921,7 @@ function applyHorizon(){
   const s=SLICER_START,e=SLICER_END;
   const agg={};
   for(const item of PROG_DATA){
+    if(DISABLED_PAS.has(item.mat))continue; // PA desativado — ignora do cálculo
     const d=new Date(item.date);d.setHours(12,0,0,0);
     if(s&&d<new Date(s.getFullYear(),s.getMonth(),s.getDate()))continue;
     if(e&&d>new Date(e.getFullYear(),e.getMonth(),e.getDate(),23,59))continue;
@@ -954,19 +961,29 @@ function renderPACards(){
   const body=document.getElementById('paCardsBody');
   const summary=document.getElementById('paCardsSummary');
   if(!body)return;
-  const items=Object.entries(queued);
-  if(summary)summary.textContent=`${items.length} PAs · ${Math.round(items.reduce((s,[,v])=>s+v.qty,0)).toLocaleString('pt-BR')} peças`;
-  if(!items.length){
+  const allItems=Object.entries({...queued,...Object.fromEntries(
+    [...DISABLED_PAS].filter(mat=>PROG_DATA.some(x=>x.mat===mat)).map(mat=>{
+      const rows=PROG_DATA.filter(x=>x.mat===mat);
+      const pa=rows[0]?.pa;
+      const qty=rows.reduce((s,x)=>s+x.qty,0);
+      const lines=rows.map(x=>({date:x.date,qty:x.qty}));
+      return[mat,{pa,qty,lines}];
+    })
+  )});
+  const activeCount=allItems.filter(([m])=>!DISABLED_PAS.has(m)).length;
+  const activeQty=allItems.filter(([m])=>!DISABLED_PAS.has(m)).reduce((s,[,v])=>s+v.qty,0);
+  if(summary)summary.textContent=`${activeCount} PAs · ${Math.round(activeQty).toLocaleString('pt-BR')} peças${DISABLED_PAS.size?` (${DISABLED_PAS.size} desativado${DISABLED_PAS.size>1?'s':''})` :''}`;
+  if(!allItems.length){
     body.innerHTML=`<div style="padding:12px 16px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3)">Nenhum PA programado no período.</div>`;
     return;
   }
 
   // Group by linha
   const byLinha={};
-  for(const[mat,data] of items){
+  for(const[mat,data] of allItems){
     const linha=PA_LINHA[mat]||'OUTROS';
     if(!byLinha[linha])byLinha[linha]={qty:0,pas:[]};
-    byLinha[linha].qty+=data.qty;
+    if(!DISABLED_PAS.has(mat))byLinha[linha].qty+=data.qty;
     byLinha[linha].pas.push({mat,data});
   }
   const linhas=Object.entries(byLinha).sort((a,b)=>a[0].localeCompare(b[0]));
@@ -980,6 +997,7 @@ function renderPACards(){
     const linhaId=`linha-${li}`;
     const hasWkLinha=pas.some(({data})=>(data.lines||[]).some(l=>isWeekend(new Date(l.date))));
     const pasHtml=pas.sort((a,b)=>(a.data.pa?.desc||a.mat).localeCompare(b.data.pa?.desc||b.mat)).map(({mat,data},pi)=>{
+      const disabled=DISABLED_PAS.has(mat);
       const paId=`pa-${li}-${pi}`;
       const hasWkPA=(data.lines||[]).some(l=>isWeekend(new Date(l.date)));
       const datesHtml=(data.lines||[]).sort((a,b)=>new Date(a.date)-new Date(b.date)).map(l=>{
@@ -990,15 +1008,21 @@ function renderPACards(){
           <span style="margin-left:auto;font-weight:700;color:${wk?'#f59e0b':'var(--text2)'}">${Math.round(l.qty)} pc</span>
         </div>`;
       }).join('');
-      return`<div>
-        <div onclick="(function(el){const next=el.nextElementSibling;const arr=el.querySelector('.pa-arr');next.style.display=next.style.display==='block'?'none':'block';arr.style.transform=next.style.display==='block'?'rotate(90deg)':''})(this)"
-          style="display:flex;align-items:center;gap:8px;padding:5px 8px 5px 12px;cursor:pointer;border-bottom:1px solid var(--border);background:var(--s1);">
-          <span class="pa-arr" style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--text3);transition:transform .15s">▶</span>
-          <div style="flex:1;min-width:0;">
-            <div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--text3)">${mat}</div>
-            <div style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;color:${hasWkPA?'#f59e0b':'var(--text2)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${data.pa?.desc||mat}</div>
+      return`<div style="opacity:${disabled?'.45':'1'};transition:opacity .2s;">
+        <div style="display:flex;align-items:center;border-bottom:1px solid var(--border);background:var(--s1);">
+          <div onclick="(function(el){const next=el.parentElement.nextElementSibling;const arr=el.querySelector('.pa-arr');next.style.display=next.style.display==='block'?'none':'block';arr.style.transform=next.style.display==='block'?'rotate(90deg)':''})(this)"
+            style="display:flex;align-items:center;gap:8px;padding:5px 8px 5px 12px;cursor:pointer;flex:1;min-width:0;">
+            <span class="pa-arr" style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--text3);transition:transform .15s">▶</span>
+            <div style="flex:1;min-width:0;">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--text3)">${mat}</div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;color:${disabled?'var(--text3)':hasWkPA?'#f59e0b':'var(--text2)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${disabled?'text-decoration:line-through':''}">${data.pa?.desc||mat}</div>
+            </div>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:800;color:${disabled?'var(--text3)':'var(--text)'};white-space:nowrap">${Math.round(data.qty)} <span style="font-size:8px;font-weight:400;color:var(--text3)">pc</span></span>
           </div>
-          <span style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:800;color:var(--text);white-space:nowrap">${Math.round(data.qty)} <span style="font-size:8px;font-weight:400;color:var(--text3)">pc</span></span>
+          <button onclick="toggleDisabledPA('${mat}')" title="${disabled?'Reativar PA':'Desativar PA'}"
+            style="flex-shrink:0;margin:0 8px;width:24px;height:24px;border-radius:3px;border:1px solid ${disabled?'var(--accent2)':'var(--border2)'};background:${disabled?'rgba(37,99,168,.15)':'transparent'};color:${disabled?'var(--accent2)':'var(--text3)'};cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;transition:all .15s;">
+            ${disabled?'✓':'✕'}
+          </button>
         </div>
         <div style="display:none">${datesHtml}</div>
       </div>`;
@@ -1017,6 +1041,14 @@ function renderPACards(){
       <div style="display:none">${pasHtml}</div>
     </div>`;
   }).join('');
+}
+
+function toggleDisabledPA(mat){
+  if(DISABLED_PAS.has(mat))DISABLED_PAS.delete(mat);
+  else DISABLED_PAS.add(mat);
+  saveDisabledPAs();
+  applyHorizon();
+  renderPACards();
 }
 
 function defS(ct){
@@ -1080,6 +1112,7 @@ async function init(){
   const bar=document.getElementById('lbar');
   bar.style.width='10%';
   try{ctSets=JSON.parse(localStorage.getItem('pcp_cts_v2')||'{}');}catch(e){}
+  loadDisabledPAs();
 
   bar.style.width='20%';
 
@@ -1496,7 +1529,7 @@ function showTestSelector(){
   TEST_ACTIVE=false;
   document.getElementById('testSelectorWrap').style.display='';
   document.getElementById('testSimWrap').style.display='none';
-  document.getElementById('testResetBtn').style.display='none';
+  document.getElementById('testResetBtn').style.display='none';document.getElementById('testEagleBtn').style.display='none';
   document.getElementById('testNewSelBtn').style.display='none';
   renderTestSelector();
 }
@@ -1548,6 +1581,93 @@ function startTestEnv(){
   showTestSim();
 }
 
+// ── EAGLE DU ─────────────────────────────────────────────────────────────────
+// PA fictício para simulação de carga: 18 peças, tempo total 2110s = 35,17 min
+// Distribuído igualmente entre os CTs de solda ativos no Ambiente de Testes.
+const EAGLE_DU_INDIR_PER_PIECE = 2110/18/60; // 1.9537 min/peça
+const EAGLE_DU_SETUPS_PER_PIECE = 1; // 1 setup por peça
+
+function promptEagleDU(){
+  // Modal simples inline — reutiliza o overlay de detalhes
+  const existing=document.getElementById('eagleDuModal');
+  if(existing){existing.remove();return;}
+
+  const modal=document.createElement('div');
+  modal.id='eagleDuModal';
+  modal.style.cssText='position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:200;background:var(--s1);border:1px solid var(--border2);border-radius:6px;padding:24px 28px;min-width:320px;box-shadow:0 8px 40px rgba(0,0,0,.6);';
+  modal.innerHTML=`
+    <div style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:800;color:#8b5cf6;margin-bottom:4px;">+ EAGLE DU</div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-bottom:18px;">18 setups · 1,953 min/peça · distribuído igualmente entre CTs de solda ativos</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
+      <label style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);">Quantidade:</label>
+      <input id="eagleDuQty" type="number" min="1" step="1" value="18"
+        style="width:80px;background:var(--bg);border:1px solid var(--accent2);color:var(--accent3);font-family:'JetBrains Mono',monospace;font-size:14px;padding:6px 10px;border-radius:3px;text-align:center;">
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="addEagleDU()" class="calc-all" style="flex:1;">✓ Adicionar</button>
+      <button onclick="document.getElementById('eagleDuModal')?.remove()" class="recalc">Cancelar</button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  document.getElementById('eagleDuQty').focus();
+}
+
+function addEagleDU(){
+  const qtyInput=document.getElementById('eagleDuQty');
+  const qty=parseInt(qtyInput?.value)||0;
+  if(qty<1){alert('Informe uma quantidade válida.');return;}
+
+  // Identifica CTs de solda ativos (com carga > 0) na simulação atual
+  const SOLDA_CTS=['ESTA-009','ESTA-033','ESTA-020','ESTA-028','ESTA-032'];
+  const activeSolda=TEST_SELECTED_CTS.filter(ct=>
+    SOLDA_CTS.includes(ct)&&ctLoad(TEST_CTMAP[ct]||{})>0
+  );
+
+  if(!activeSolda.length){
+    alert('Nenhum CT de solda ativo encontrado na simulação.\nAdicione CTs de solda com carga antes de inserir o EAGLE DU.');
+    return;
+  }
+
+  const n=activeSolda.length;
+  const base=Math.floor(qty/n);
+  const rem=qty%n;
+
+  activeSolda.forEach((ct,i)=>{
+    const fracQty=base+(i<rem?1:0);
+    if(!fracQty)return;
+
+    const procMins=fracQty*EAGLE_DU_INDIR_PER_PIECE;
+    const setupDef=getSetupDefault(ct);
+    const setupMins=fracQty*setupDef.qty*setupDef.min;
+
+    // Adiciona como item fictício no compMap
+    if(!TEST_COMPMAP[ct])TEST_COMPMAP[ct]=[];
+    const existing=TEST_COMPMAP[ct].find(it=>it.mat==='EAGLE_DU');
+    if(existing){
+      existing.qtyTotal+=fracQty;
+      existing.mins+=procMins;
+      if(existing._setupQty!=null)existing._setupMin=setupDef.min;
+    } else {
+      TEST_COMPMAP[ct].push({
+        mat:'EAGLE_DU',
+        desc:`EAGLE DU (simulação · ${qty} pcs total)`,
+        qtyTotal:fracQty,
+        indirUnit:EAGLE_DU_INDIR_PER_PIECE,
+        mins:procMins,
+        _setupQty:setupDef.qty,
+        _setupMin:setupDef.min,
+        _origCt:null,
+      });
+    }
+    _recalcTestCT(ct);
+  });
+
+  saveTestEnv();
+  document.getElementById('eagleDuModal')?.remove();
+  renderTestSim();
+  alert(`EAGLE DU adicionado: ${qty} pcs distribuídas entre ${activeSolda.length} CT(s): ${activeSolda.join(', ')}`);
+}
+
 function resetTestEnv(){
   if(!confirm('Resetar a simulação? Todas as movimentações feitas serão descartadas.'))return;
   localStorage.removeItem(TEST_STORAGE_KEY);
@@ -1559,7 +1679,7 @@ function resetTestEnv(){
 function showTestSim(){
   document.getElementById('testSelectorWrap').style.display='none';
   document.getElementById('testSimWrap').style.display='flex';
-  document.getElementById('testResetBtn').style.display='';
+  document.getElementById('testResetBtn').style.display='';document.getElementById('testEagleBtn').style.display='';
   document.getElementById('testNewSelBtn').style.display='';
   renderTestSim();
 }
@@ -2656,6 +2776,8 @@ document.getElementById('xlsIn').addEventListener('change',function(e){
 
     // Add to PROG_DATA (replace existing)
     PROG_DATA=newItems;
+    DISABLED_PAS=new Set(); // reseta desativações ao importar novo XLS
+    saveDisabledPAs();
     PROG_DATE_MIN=new Date(Math.min(...newItems.map(x=>x.date)));
     PROG_DATE_MAX=new Date(Math.max(...newItems.map(x=>x.date)));
     SLICER_START=new Date(PROG_DATE_MIN);
@@ -2697,7 +2819,7 @@ function setupEvents(){
   }));
   document.getElementById('calcAll').addEventListener('click',()=>{calcAll().then(()=>{renderProgGrid();});});
   document.getElementById('recalcBtn')?.addEventListener('click',()=>{calcAll().then(()=>{renderLinhaCards();renderConsol();});});
-  document.getElementById('clearProg')?.addEventListener('click',()=>{queued={};updateProgCounter();renderProgGrid();renderPAList();});
+  document.getElementById('clearProg')?.addEventListener('click',()=>{queued={};PROG_DATA=[];DISABLED_PAS=new Set();saveDisabledPAs();updateProgCounter();renderProgGrid();renderPAList();renderPACards();});
   document.querySelectorAll('.stab').forEach(t=>t.addEventListener('click',()=>renderSector(t.dataset.sc)));
   document.addEventListener('click',e=>{
     const btn=e.target.closest('[data-rs]');if(!btn)return;
