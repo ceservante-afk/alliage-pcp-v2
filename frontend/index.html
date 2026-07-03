@@ -1601,25 +1601,40 @@ function startTestEnv(){
 // ── EAGLE DU ─────────────────────────────────────────────────────────────────
 // PA fictício para simulação de carga: 18 peças, tempo total 2110s = 35,17 min
 // Distribuído igualmente entre os CTs de solda ativos no Ambiente de Testes.
-const EAGLE_DU_INDIR_PER_PIECE = 2110/18/60; // 1.9537 min/peça
-const EAGLE_DU_SETUPS_PER_PIECE = 1; // 1 setup por peça
+const EAGLE_DU_SECS_PER_CONJUNTO = 2110; // segundos por conjunto completo (18 peças soldadas)
+const EAGLE_DU_ITENS_POR_CONJUNTO = 18;  // itens por conjunto (para cálculo de setup)
 
 function promptEagleDU(){
-  // Modal simples inline — reutiliza o overlay de detalhes
   const existing=document.getElementById('eagleDuModal');
   if(existing){existing.remove();return;}
 
+  // CTs de solda disponíveis na simulação atual
+  const SOLDA_CTS=['ESTA-009','ESTA-033','ESTA-020','ESTA-028','ESTA-032'];
+  const soldaCTs=TEST_SELECTED_CTS.filter(ct=>SOLDA_CTS.includes(ct));
+
   const modal=document.createElement('div');
   modal.id='eagleDuModal';
-  modal.style.cssText='position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:200;background:var(--s1);border:1px solid var(--border2);border-radius:6px;padding:24px 28px;min-width:320px;box-shadow:0 8px 40px rgba(0,0,0,.6);';
+  modal.style.cssText='position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:200;background:var(--s1);border:1px solid var(--border2);border-radius:6px;padding:24px 28px;min-width:360px;box-shadow:0 8px 40px rgba(0,0,0,.6);';
   modal.innerHTML=`
     <div style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:800;color:#8b5cf6;margin-bottom:4px;">+ EAGLE DU</div>
-    <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-bottom:18px;">18 setups · 1,953 min/peça · distribuído igualmente entre CTs de solda ativos</div>
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
-      <label style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);">Quantidade:</label>
-      <input id="eagleDuQty" type="number" min="1" step="1" value="18"
-        style="width:80px;background:var(--bg);border:1px solid var(--accent2);color:var(--accent3);font-family:'JetBrains Mono',monospace;font-size:14px;padding:6px 10px;border-radius:3px;text-align:center;">
+    <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-bottom:16px;">2.110s por conjunto · 18 itens/conjunto · carga total dividida entre CTs selecionados</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+      <label style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2);white-space:nowrap;">Qtd. conjuntos:</label>
+      <input id="eagleDuQty" type="number" min="1" step="1" value="1"
+        style="width:80px;background:var(--bg);border:1px solid var(--accent2);color:var(--accent3);font-family:'JetBrains Mono',monospace;font-size:14px;padding:6px 10px;border-radius:3px;text-align:center;"
+        oninput="updateEaglePreview()">
     </div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em;">Distribuir entre:</div>
+    <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:14px;">
+      ${soldaCTs.length?soldaCTs.map(ct=>`
+        <label style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--s2);border:1px solid var(--border);border-radius:3px;cursor:pointer;">
+          <input type="checkbox" class="eagle-ct-chk" value="${ct}" checked style="accent-color:#8b5cf6;">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent3);font-weight:700;">${ct}</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);">${CT_NAMES[ct]||''}</span>
+        </label>`).join('')
+      :'<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#ef4444;">Nenhum CT de solda na simulação atual.</div>'}
+    </div>
+    <div id="eaglePreview" style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text2);background:var(--s2);border:1px solid var(--border);border-radius:3px;padding:8px 10px;margin-bottom:14px;"></div>
     <div style="display:flex;gap:8px;">
       <button onclick="addEagleDU()" class="calc-all" style="flex:1;">✓ Adicionar</button>
       <button onclick="document.getElementById('eagleDuModal')?.remove()" class="recalc">Cancelar</button>
@@ -1627,51 +1642,50 @@ function promptEagleDU(){
   `;
   document.body.appendChild(modal);
   document.getElementById('eagleDuQty').focus();
+  updateEaglePreview();
+}
+
+function updateEaglePreview(){
+  const qty=parseInt(document.getElementById('eagleDuQty')?.value)||0;
+  const checked=[...document.querySelectorAll('.eagle-ct-chk:checked')].map(c=>c.value);
+  const preview=document.getElementById('eaglePreview');
+  if(!preview)return;
+  if(!qty||!checked.length){preview.textContent='Selecione ao menos 1 CT e informe a quantidade.';return;}
+  const totalMin=(qty*EAGLE_DU_SECS_PER_CONJUNTO)/60;
+  const totalSetups=qty*EAGLE_DU_ITENS_POR_CONJUNTO;
+  const perCT=totalMin/checked.length;
+  const setupsPerCT=Math.round(totalSetups/checked.length);
+  preview.innerHTML=`Total: <b style="color:#8b5cf6">${totalMin.toFixed(1)} min</b> · ${totalSetups} setups &nbsp;→&nbsp; Por CT: <b style="color:var(--accent3)">${perCT.toFixed(1)} min</b> · ${setupsPerCT} setups`;
 }
 
 function addEagleDU(){
-  const qtyInput=document.getElementById('eagleDuQty');
-  const qty=parseInt(qtyInput?.value)||0;
+  const qty=parseInt(document.getElementById('eagleDuQty')?.value)||0;
   if(qty<1){alert('Informe uma quantidade válida.');return;}
+  const selectedCTs=[...document.querySelectorAll('.eagle-ct-chk:checked')].map(c=>c.value);
+  if(!selectedCTs.length){alert('Selecione ao menos 1 CT.');return;}
 
-  // Identifica CTs de solda ativos (com carga > 0) na simulação atual
-  const SOLDA_CTS=['ESTA-009','ESTA-033','ESTA-020','ESTA-028','ESTA-032'];
-  const activeSolda=TEST_SELECTED_CTS.filter(ct=>
-    SOLDA_CTS.includes(ct)&&ctLoad(TEST_CTMAP[ct]||{})>0
-  );
+  const totalMin=(qty*EAGLE_DU_SECS_POR_CONJUNTO)/60;
+  const totalSetups=qty*EAGLE_DU_ITENS_POR_CONJUNTO;
+  const n=selectedCTs.length;
 
-  if(!activeSolda.length){
-    alert('Nenhum CT de solda ativo encontrado na simulação.\nAdicione CTs de solda com carga antes de inserir o EAGLE DU.');
-    return;
-  }
-
-  const n=activeSolda.length;
-  const base=Math.floor(qty/n);
-  const rem=qty%n;
-
-  activeSolda.forEach((ct,i)=>{
-    const fracQty=base+(i<rem?1:0);
-    if(!fracQty)return;
-
-    const procMins=fracQty*EAGLE_DU_INDIR_PER_PIECE;
+  selectedCTs.forEach(ct=>{
+    const procMins=totalMin/n;
     const setupDef=getSetupDefault(ct);
-    const setupMins=fracQty*setupDef.qty*setupDef.min;
+    const setupsThisCT=Math.round(totalSetups/n);
 
-    // Adiciona como item fictício no compMap
     if(!TEST_COMPMAP[ct])TEST_COMPMAP[ct]=[];
     const existing=TEST_COMPMAP[ct].find(it=>it.mat==='EAGLE_DU');
     if(existing){
-      existing.qtyTotal+=fracQty;
+      existing.qtyTotal+=qty/n;
       existing.mins+=procMins;
-      if(existing._setupQty!=null)existing._setupMin=setupDef.min;
     } else {
       TEST_COMPMAP[ct].push({
         mat:'EAGLE_DU',
-        desc:`EAGLE DU (simulação · ${qty} pcs total)`,
-        qtyTotal:fracQty,
-        indirUnit:EAGLE_DU_INDIR_PER_PIECE,
+        desc:`EAGLE DU (${qty} conjunto${qty>1?'s':''} · simulação)`,
+        qtyTotal:qty/n,
+        indirUnit:EAGLE_DU_SECS_POR_CONJUNTO/60,
         mins:procMins,
-        _setupQty:setupDef.qty,
+        _setupQty:Math.round(setupsThisCT/Math.max(qty/n,1)),
         _setupMin:setupDef.min,
         _origCt:null,
       });
@@ -1682,7 +1696,6 @@ function addEagleDU(){
   saveTestEnv();
   document.getElementById('eagleDuModal')?.remove();
   renderTestSim();
-  alert(`EAGLE DU adicionado: ${qty} pcs distribuídas entre ${activeSolda.length} CT(s): ${activeSolda.join(', ')}`);
 }
 
 function resetTestEnv(){
