@@ -1087,10 +1087,11 @@ function loadProgData(){
     PROG_DATA=obj.data.map(x=>({...x,date:new Date(x.date)}));
     PROG_DATE_MIN=obj.min?new Date(obj.min):null;
     PROG_DATE_MAX=obj.max?new Date(obj.max):null;
-    // Rebuild queued with lines (aggregated by mat)
+    // Rebuild queued with lines (aggregated by mat) — respeita DISABLED_PAS
     queued={};
     for(const item of PROG_DATA){
       const mat=item.mat;
+      if(DISABLED_PAS.has(mat))continue;
       if(!queued[mat])queued[mat]={pa:item.pa,qty:item.qty,ctMap:null,compMap:null,lines:[{date:item.date,qty:item.qty}]};
       else{queued[mat].qty+=item.qty;queued[mat].lines.push({date:item.date,qty:item.qty});}
     }
