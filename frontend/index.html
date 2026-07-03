@@ -1664,7 +1664,7 @@ function addEagleDU(){
   const selectedCTs=[...document.querySelectorAll('.eagle-ct-chk:checked')].map(c=>c.value);
   if(!selectedCTs.length){alert('Selecione ao menos 1 CT.');return;}
 
-  const totalMin=(qty*EAGLE_DU_SECS_POR_CONJUNTO)/60;
+  const totalMin=(qty*EAGLE_DU_SECS_PER_CONJUNTO)/60;
   const n=selectedCTs.length;
 
   selectedCTs.forEach(ct=>{
@@ -1679,7 +1679,7 @@ function addEagleDU(){
         mat:'EAGLE_DU',
         desc:`EAGLE DU (${qty} conjunto${qty>1?'s':''} · simulação)`,
         qtyTotal:qty/n,
-        indirUnit:EAGLE_DU_SECS_POR_CONJUNTO/60,
+        indirUnit:EAGLE_DU_SECS_PER_CONJUNTO/60,
         mins:procMins,
         _setupQty:EAGLE_DU_ITENS_POR_CONJUNTO, // 18 setups fixos por CT
         _setupMin:30,                          // 30min por setup
