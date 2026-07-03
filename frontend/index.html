@@ -1569,23 +1569,32 @@ function startTestEnv(){
   const checked=[...document.querySelectorAll('.test-ct-chk:checked')].map(c=>c.value);
   if(!checked.length){alert('Selecione ao menos um CT para iniciar a simulação.');return;}
   TEST_SELECTED_CTS=checked;
-  const{ctMap,compMap}=getGlobalMaps();
-  TEST_CTMAP=_deepCloneMap(ctMap);
-  TEST_COMPMAP=_deepCloneMap(compMap);
-  for(const ct of Object.keys(TEST_COMPMAP)){
-    const def=getSetupDefault(ct);
-    if(!def.qty)continue;
-    for(const item of TEST_COMPMAP[ct]){
-      if(item._setupQty==null)item._setupQty=def.qty;
-      if(item._setupMin==null)item._setupMin=def.min;
+
+  // Força recálculo completo antes de capturar o snapshot
+  // para garantir que PAs desativados/reativados reflitam corretamente
+  const btn=document.getElementById('testStartBtn');
+  if(btn){btn.disabled=true;btn.textContent='Calculando...';}
+
+  calcAll().then(()=>{
+    const{ctMap,compMap}=getGlobalMaps();
+    TEST_CTMAP=_deepCloneMap(ctMap);
+    TEST_COMPMAP=_deepCloneMap(compMap);
+    for(const ct of Object.keys(TEST_COMPMAP)){
+      const def=getSetupDefault(ct);
+      if(!def.qty)continue;
+      for(const item of TEST_COMPMAP[ct]){
+        if(item._setupQty==null)item._setupQty=def.qty;
+        if(item._setupMin==null)item._setupMin=def.min;
+      }
     }
-  }
-  TEST_ORIGINAL_CTMAP=_deepCloneMap(ctMap);
-  TEST_ORIGINAL_COMPMAP=_deepCloneMap(TEST_COMPMAP);
-  TEST_MIGRATED=true;
-  TEST_ACTIVE=true;
-  saveTestEnv();
-  showTestSim();
+    TEST_ORIGINAL_CTMAP=_deepCloneMap(ctMap);
+    TEST_ORIGINAL_COMPMAP=_deepCloneMap(TEST_COMPMAP);
+    TEST_MIGRATED=true;
+    TEST_ACTIVE=true;
+    saveTestEnv();
+    if(btn){btn.disabled=false;btn.textContent='▶ Iniciar Simulação';}
+    showTestSim();
+  });
 }
 
 // ── EAGLE DU ─────────────────────────────────────────────────────────────────
