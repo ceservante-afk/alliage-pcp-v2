@@ -1048,6 +1048,8 @@ function toggleDisabledPA(mat){
   else DISABLED_PAS.add(mat);
   saveDisabledPAs();
   applyHorizon();
+  // Invalida o BOM cache dos PAs restantes para forçar recálculo antes do Ambiente de Testes
+  for(const v of Object.values(queued)){v.ctMap=null;v.compMap=null;}
   renderPACards();
 }
 
@@ -1559,6 +1561,14 @@ function renderTestSelector(){
 function startTestEnv(){
   const checked=[...document.querySelectorAll('.test-ct-chk:checked')].map(c=>c.value);
   if(!checked.length){alert('Selecione ao menos um CT para iniciar a simulação.');return;}
+
+  // Verifica se o BOM está desatualizado (algum PA no queued ainda tem ctMap=null)
+  const needsRecalc=Object.values(queued).some(v=>v.ctMap===null);
+  if(needsRecalc){
+    alert('⚠ O cálculo de BOM está desatualizado.\n\nClique em "Calcular Tudo" na aba Programação antes de iniciar a simulação para garantir que as alterações de PA (ativações/desativações) reflitam corretamente.');
+    return;
+  }
+
   TEST_SELECTED_CTS=checked;
   // Clone the REAL current state — never mutate globalCTMap/globalCompMap directly
   const{ctMap,compMap}=getGlobalMaps();
@@ -1575,7 +1585,7 @@ function startTestEnv(){
   }
   TEST_ORIGINAL_CTMAP=_deepCloneMap(ctMap);
   TEST_ORIGINAL_COMPMAP=_deepCloneMap(TEST_COMPMAP);
-  TEST_MIGRATED=true; // snapshot capturado corretamente na origem — não precisa de migração futura
+  TEST_MIGRATED=true;
   TEST_ACTIVE=true;
   saveTestEnv();
   showTestSim();
