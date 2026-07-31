@@ -1,16 +1,13 @@
 import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from urllib.parse import urlparse
-
-_url = urlparse(os.environ.get("DATABASE_URL", ""))
 
 DB_PARAMS = {
-    "host":     _url.hostname,
-    "port":     _url.port or 5432,
-    "dbname":   _url.path.lstrip("/"),
-    "user":     _url.username,
-    "password": _url.password,
+    "host":     os.environ["DB_HOST"],
+    "port":     int(os.environ.get("DB_PORT", "5432")),
+    "dbname":   os.environ["DB_NAME"],
+    "user":     os.environ["DB_USER"],
+    "password": os.environ["DB_PASSWORD"],
     "sslmode":  "require",
 }
 
