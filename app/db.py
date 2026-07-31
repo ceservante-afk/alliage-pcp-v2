@@ -1,16 +1,23 @@
 import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from functools import lru_cache
+from urllib.parse import urlparse
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "")
+_url = urlparse(os.environ.get("DATABASE_URL", ""))
+
+DB_PARAMS = {
+    "host":     _url.hostname,
+    "port":     _url.port or 5432,
+    "dbname":   _url.path.lstrip("/"),
+    "user":     _url.username,
+    "password": _url.password,
+    "sslmode":  "require",
+}
 
 def get_conn():
-    """Get a database connection."""
-    return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+    return psycopg2.connect(**DB_PARAMS, cursor_factory=RealDictCursor)
 
 def execute(sql: str, params=None, fetch=True):
-    """Execute a query and return results."""
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(sql, params)
